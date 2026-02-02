@@ -5,6 +5,20 @@
  * Created: 2026-02-01
  **/
 
+#[derive(PartialEq)]
+enum MantissaKind {
+    Int,
+    Float
+}
+
+enum MantissaError {
+    MissingDigits,
+}
+
+enum ExponentError {
+    MissingDigits,
+}
+
 #[derive(PartialEq, Copy, Clone, Debug)]
 enum Keyword {
     LOCAL,
@@ -29,9 +43,9 @@ enum TokenKind {
     SEMICOLON,
     INTEGER,
     DOUBLE,
-    EOF,
     UNKNOWN,
     ERROR,
+    EOF,
 }
 
 #[derive(Debug)]
@@ -47,17 +61,17 @@ struct Tokenizer {
 }
 
 impl Tokenizer {
-    fn is_identifier_start(&self, ch: char) -> bool {
-        ch == '_' || ch.is_alphabetic()
+    fn is_identifier_start(&self, b: u8) -> bool {
+        b == b'_' || b.is_ascii_alphabetic()
     }
 
-    fn is_number_start(&self, ch: char) -> bool {
-        if ch == '.' {
-            let Some((_, ch2)) = self.peek2() else { return false };
-            if !(ch2 as char).is_digit(10) { return false };
+    fn is_number_start(&self, b: u8) -> bool {
+        if b == b'.' {
+            let Some((_, b2)) = self.peek2() else { return false };
+            if !b2.is_ascii_digit() { return false };
             return true
         };
-        ch.is_digit(10)
+        b.is_ascii_digit()
     }
 
     fn peek2(&self) -> Option<(u8, u8)> {
@@ -71,6 +85,25 @@ impl Tokenizer {
         self.input_str.as_bytes().get(self.current_pos).copied()
     }
 
+    fn bump(&mut self) {
+        self.current_pos += 1;
+    }
+
+    /*
+    // TODO: not implemented yet
+    fn consume_predicate(&mut self, pred: F) -> usize {
+    }
+    */
+
+    fn consume_while<T: Fn(u8) -> bool>(&mut self, pred: T) -> usize {
+        let mut tokens_consumed = 0;
+        while self.peek().is_some_and(|b| pred(b)) {
+            self.bump();
+            tokens_consumed += 1;
+        }
+        tokens_consumed
+    }
+
     fn lookup_keyword(&self, lexeme: &str) -> Option<Keyword> {
         match lexeme {
             "local" => Some(Keyword::LOCAL),
@@ -78,14 +111,14 @@ impl Tokenizer {
         }
     }
 
-    fn lookup_operator(&self, lexeme: &str) -> Option<Operator> {
-        match lexeme {
-            "=" => Some(Operator::Equal),
-            "+" => Some(Operator::Plus),
-            "-" => Some(Operator::Minus),
-            "/" => Some(Operator::Division),
-            "*" => Some(Operator::Multiplication),
-            "%" => Some(Operator::Modulus),
+    fn lookup_operator(&self, b: u8) -> Option<Operator> {
+        match b {
+            b'=' => Some(Operator::Equal),
+            b'+' => Some(Operator::Plus),
+            b'-' => Some(Operator::Minus),
+            b'/' => Some(Operator::Division),
+            b'*' => Some(Operator::Multiplication),
+            b'%' => Some(Operator::Modulus),
             _ => None,
         }
     }
@@ -94,9 +127,8 @@ impl Tokenizer {
      *
      **/
     fn eat_identifier(&mut self, start: usize) -> Token {
-        let bytes = self.input_str.as_bytes();
-        while self.current_pos < bytes.len() && bytes[self.current_pos].is_ascii_alphanumeric() {
-            self.current_pos += 1;
+        while self.peek().is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            self.bump();
         }
 
         let lexeme = &self.input_str[start..self.current_pos];
@@ -115,100 +147,89 @@ impl Tokenizer {
         }
     }
 
+    // ( DIGIT+ ( '.' DIGIT* )? | '.' DIGIT+ )
+    fn scan_mantissa(&mut self) -> Result<MantissaKind, MantissaError> {
+        // starts with .
+        if self.peek().is_some_and(|b| b == b'.') {
+            self.bump();
+            let frac_digits = self.consume_while(|b| b.is_ascii_digit());
+            return if frac_digits == 0 {
+                Err(MantissaError::MissingDigits)
+            } else {
+                Ok(MantissaKind::Float)
+            };
+        }
+
+        // starts with a number
+        let int_digits = self.consume_while(|b| b.is_ascii_digit());
+        if int_digits == 0 {
+            return Err(MantissaError::MissingDigits);
+        }
+
+        if self.peek().is_some_and(|b| b == b'.') {
+            self.bump();
+            self.consume_while(|b| b.is_ascii_digit());
+            return Ok(MantissaKind::Float);
+        }
+        Ok(MantissaKind::Int)
+    }
+
+    // ( [eE] [+-]? DIGIT+ )?
+    fn scan_exponent(&mut self) -> Result<bool, ExponentError> {
+        if self.peek().is_some_and(|b| b == b'e' || b == b'E') {
+            self.bump();
+        } else {
+            return Ok(false);
+        }
+
+        if self.peek().is_some_and(|b| b == b'-' || b == b'+') {
+            self.bump();
+            let int_digits = self.consume_while(|b| b.is_ascii_digit());
+            if int_digits == 0 {
+               return Err(ExponentError::MissingDigits);
+            }
+            return Ok(true);
+        }
+
+        if !self.peek().is_some_and(|b| b.is_ascii_digit()) {
+            return Err(ExponentError::MissingDigits);
+        }
+
+        self.consume_while(|b| b.is_ascii_digit());
+        Ok(true)
+    }
+
     /*
      * number :=
      *     ( DIGIT+ ( '.' DIGIT* )? | '.' DIGIT+ )
      *     ( [eE] [+-]? DIGIT+ )?
      **/
     fn eat_number(&mut self, start: usize) -> Token {
-        let mut seen_dot = false;
-        let mut seen_exp = false;
-        let mut seen_op = false;
-        let mut exp_has_digits = false;
+        let mantissa_kind = match self.scan_mantissa() {
+            Ok(kind) => kind,
+            Err(_) => return Token { kind: TokenKind::ERROR, start, end: self.current_pos },
+        };
 
-        let bytes = self.input_str.as_bytes();
-        while self.current_pos < bytes.len() {
-            let ch = self.peek().unwrap();
-            if seen_exp {
-                if (ch as char) == '+' || (ch as char) == '-' {
-                    self.current_pos += 1;
-                    if seen_op {
-                        return Token {
-                            kind: TokenKind::ERROR,
-                            start,
-                            end: self.current_pos,
-                        }
-                    }
-                    seen_op = true;
-                }
+        let exponent_present = match self.scan_exponent() {
+            Ok(present) => present,
+            Err(_) => return Token { kind: TokenKind::ERROR, start, end: self.current_pos }
+        };
 
-                let ch = self.peek().unwrap();
-                if (ch as char).is_digit(10) {
-                    self.current_pos += 1;
-                    exp_has_digits = true;
-                } else {
-                    if !exp_has_digits {
-                        return Token {
-                            kind: TokenKind::ERROR,
-                            start,
-                            end: self.current_pos,
-                        }
-                    }
-                    break;
-                }
-                continue
-            }
-
-            if (ch as char) == '.' {
-                if seen_dot {
-                    self.current_pos += 1;
-                    return Token {
-                        kind: TokenKind::ERROR,
-                        start,
-                        end: self.current_pos,
-                    }
-                }
-                seen_dot = true;
-            } else if (ch as char) == 'e' || (ch as char) == 'E' {
-                if seen_exp {
-                    self.current_pos += 1;
-                    return Token {
-                        kind: TokenKind::ERROR,
-                        start,
-                        end: self.current_pos,
-                    }
-                }
-                seen_exp = true;
-            } else if !(ch as char).is_digit(10) {
-                break;
-            }
-            self.current_pos += 1;
-        }
-
-        if seen_dot || seen_exp {
-            return Token {
-                kind: TokenKind::DOUBLE,
-                start,
-                end: self.current_pos,
-            }
-        }
-
-        return Token {
-            kind: TokenKind::INTEGER,
-            start,
-            end: self.current_pos,
-        }
+        let token_kind = if mantissa_kind == MantissaKind::Float || exponent_present {
+            TokenKind::DOUBLE
+        } else {
+            TokenKind::INTEGER
+        };
+        Token { kind: token_kind, start, end: self.current_pos }
     }
 
     /*
      *
      **/
     fn eat_whitespace(&mut self) -> Token {
-        let bytes = self.input_str.as_bytes();
         let start = self.current_pos;
-
-        while self.current_pos < bytes.len() && bytes[self.current_pos].is_ascii_whitespace() {
-            self.current_pos += 1;
+        while self.peek().is_some_and(|b| b.is_ascii_whitespace()) {
+            self.bump();
         }
 
         Token {
@@ -222,42 +243,39 @@ impl Tokenizer {
      *
      **/
     fn advance_token(&mut self) -> Token {
-        let bytes = self.input_str.as_bytes();
-        if self.current_pos >= bytes.len() {
+        let Some(b) = self.peek() else {
             return Token {
                 kind: TokenKind::EOF,
                 start: self.current_pos,
-                end: bytes.len()
+                end: self.current_pos,
             };
-        }
+        };
 
-        if bytes[self.current_pos].is_ascii_whitespace() {
+        if b.is_ascii_whitespace() {
             return self.eat_whitespace();
         }
 
         let start = self.current_pos;
-        while self.current_pos < bytes.len() && !bytes[self.current_pos].is_ascii_whitespace() {
-            let lexeme = &self.input_str[start..self.current_pos];
-            if let Some(operator) = self.lookup_operator(lexeme) {
+        match self.peek().and_then(|b| self.lookup_operator(b)) {
+            Some(operator) => {
+                self.bump();
                 let end = self.current_pos;
                 return Token { kind: TokenKind::OPERATOR(operator), start, end };
-            }
-
-            let ch = bytes[self.current_pos] as char;
-            if self.is_identifier_start(ch) {
-                return self.eat_identifier(start);
-            } else if self.is_number_start(ch) {
-                return self.eat_number(start);
-            } else if ch == ';' {
-                let end = self.current_pos;
-                self.current_pos += 1;
-                return Token { kind: TokenKind::SEMICOLON, start, end };
-            }
-
-            self.current_pos += 1;
-            break;
+            },
+            None => {},
         }
 
+        if self.is_identifier_start(b) {
+            return self.eat_identifier(start);
+        } else if self.is_number_start(b) {
+            return self.eat_number(start);
+        } else if b == b';' {
+            let end = self.current_pos;
+            self.bump();
+            return Token { kind: TokenKind::SEMICOLON, start, end };
+        }
+
+        self.bump();
         let end = self.current_pos;
         Token { kind: TokenKind::UNKNOWN, start, end }
     }
@@ -265,7 +283,7 @@ impl Tokenizer {
 
 pub fn tokenize(input: &str) {
     let mut tokenizer = Tokenizer {
-        input_str: String::from("1e6 1.4e+62 1e-2 e2 123.445 4 1e . integer"),
+        input_str: String::from("1..2 1234 1. .2.3 1+2 1e6 1.4e+62 1e-2 e2 123.445 4 1e . integer"),
         current_pos: 0,
     };
 
