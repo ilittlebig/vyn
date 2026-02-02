@@ -6,22 +6,23 @@
  **/
 
 #[derive(PartialEq)]
-enum MantissaKind {
-    Int,
-    Float
-}
+enum MantissaKind { Int, Float }
+enum MantissaError { MissingDigits }
+enum ExponentError { MissingDigits }
 
-enum MantissaError {
-    MissingDigits,
-}
-
-enum ExponentError {
-    MissingDigits,
+#[derive(Debug)]
+enum LexError {
+    UnexpectedEof,
+    UnterminatedString(u8),
+    UnexpectedChar(u8),
+    DanglingEscape,
+    InvalidExponent,
+    InvalidMantissa,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 enum Keyword {
-    LOCAL,
+    Local,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -36,16 +37,16 @@ enum Operator {
 
 #[derive(PartialEq, Debug)]
 enum TokenKind {
-    WHITESPACE,
-    IDENTIFIER,
-    KEYWORD(Keyword),
-    OPERATOR(Operator),
-    SEMICOLON,
-    INTEGER,
-    DOUBLE,
-    UNKNOWN,
-    ERROR,
-    EOF,
+    Whitespace,
+    Identifier,
+    StringLiteral,
+    Keyword(Keyword),
+    Operator(Operator),
+    Semicolon,
+    Integer,
+    Double,
+    Error,
+    Eof,
 }
 
 #[derive(Debug)]
@@ -55,9 +56,18 @@ struct Token {
     end: usize,
 }
 
+#[derive(Debug)]
+struct LexDiagnostic {
+    kind: LexError,
+    start: usize,
+    end: usize,
+}
+
 struct Tokenizer {
     input_str: String,
     current_pos: usize,
+    errors: Vec<LexDiagnostic>,
+    line_starts: Vec<usize>,
 }
 
 impl Tokenizer {
@@ -89,11 +99,14 @@ impl Tokenizer {
         self.current_pos += 1;
     }
 
-    /*
-    // TODO: not implemented yet
-    fn consume_predicate(&mut self, pred: F) -> usize {
+    fn bump_or_error(&mut self) -> Result<(), LexError> {
+        if self.peek().is_some() {
+            self.bump();
+            Ok(())
+        } else {
+            Err(LexError::UnexpectedEof)
+        }
     }
-    */
 
     fn consume_while<T: Fn(u8) -> bool>(&mut self, pred: T) -> usize {
         let mut tokens_consumed = 0;
@@ -106,7 +119,7 @@ impl Tokenizer {
 
     fn lookup_keyword(&self, lexeme: &str) -> Option<Keyword> {
         match lexeme {
-            "local" => Some(Keyword::LOCAL),
+            "local" => Some(Keyword::Local),
             _ => None,
         }
     }
@@ -123,6 +136,31 @@ impl Tokenizer {
         }
     }
 
+    fn lex_error(&mut self, kind: LexError, start: usize, end: usize) {
+        self.errors.push(LexDiagnostic { kind, start, end });
+    }
+
+    fn compute_line_starts(&mut self) {
+        let mut byte_index: usize = 0;
+        self.line_starts.push(byte_index);
+
+        let bytes = self.input_str.as_bytes();
+        while byte_index < bytes.len() {
+            let b = bytes[byte_index];
+            byte_index += 1;
+            if b == b'\n' { self.line_starts.push(byte_index); }
+        }
+    }
+
+    fn line_col(&self, pos: usize) -> (usize, usize) {
+        let line = match self.line_starts.binary_search(&pos) {
+            Ok(i) => i,
+            Err(k) => k - 1, // only valid if k > 0
+        };
+        let col = pos - self.line_starts[line];
+        (line, col)
+    }
+
     /*
      *
      **/
@@ -134,14 +172,14 @@ impl Tokenizer {
         let lexeme = &self.input_str[start..self.current_pos];
         if let Some(keyword_kind) = self.lookup_keyword(lexeme) {
             return Token {
-                kind: TokenKind::KEYWORD(keyword_kind),
+                kind: TokenKind::Keyword(keyword_kind),
                 start,
                 end: self.current_pos,
             };
         }
 
         Token {
-            kind: TokenKind::IDENTIFIER,
+            kind: TokenKind::Identifier,
             start,
             end: self.current_pos,
         }
@@ -207,21 +245,70 @@ impl Tokenizer {
     fn eat_number(&mut self, start: usize) -> Token {
         let mantissa_kind = match self.scan_mantissa() {
             Ok(kind) => kind,
-            Err(_) => return Token { kind: TokenKind::ERROR, start, end: self.current_pos },
+            Err(_) => {
+                let end = self.current_pos;
+                self.lex_error(LexError::InvalidMantissa, start, end);
+                return Token { kind: TokenKind::Error, start, end };
+            }
         };
 
         let exponent_present = match self.scan_exponent() {
             Ok(present) => present,
-            Err(_) => return Token { kind: TokenKind::ERROR, start, end: self.current_pos }
+            Err(_) => {
+                let end = self.current_pos;
+                self.lex_error(LexError::InvalidExponent, start, end);
+                return Token { kind: TokenKind::Error, start, end };
+            }
         };
 
         let token_kind = if mantissa_kind == MantissaKind::Float || exponent_present {
-            TokenKind::DOUBLE
+            TokenKind::Double
         } else {
-            TokenKind::INTEGER
+            TokenKind::Integer
         };
         Token { kind: token_kind, start, end: self.current_pos }
     }
+
+    /*
+     *
+     **/
+    fn eat_string_literal(&mut self) -> Token {
+        let start = self.current_pos;
+        debug_assert!(matches!(self.peek(), Some(b'"' | b'\'')));
+        let delimiter = self.peek().unwrap();
+
+        self.bump();
+        loop {
+            let Some(b) = self.peek() else {
+                let end = self.current_pos;
+                self.lex_error(LexError::UnterminatedString(delimiter), start, end);
+                return Token { kind: TokenKind::Error, start, end };
+            };
+
+            if b == delimiter {
+                self.bump();
+                break;
+            }
+
+            if b == b'\\' {
+                self.bump();
+                if self.bump_or_error().is_err() {
+                    let end = self.current_pos;
+                    self.lex_error(LexError::DanglingEscape, end - 1, end);
+                    return Token { kind: TokenKind::Error, start, end };
+                }
+            } else {
+                self.bump();
+            }
+        }
+
+        Token {
+            kind: TokenKind::StringLiteral,
+            start,
+            end: self.current_pos
+        }
+    }
+
 
     /*
      *
@@ -233,7 +320,7 @@ impl Tokenizer {
         }
 
         Token {
-            kind: TokenKind::WHITESPACE,
+            kind: TokenKind::Whitespace,
             start,
             end: self.current_pos,
         }
@@ -245,7 +332,7 @@ impl Tokenizer {
     fn advance_token(&mut self) -> Token {
         let Some(b) = self.peek() else {
             return Token {
-                kind: TokenKind::EOF,
+                kind: TokenKind::Eof,
                 start: self.current_pos,
                 end: self.current_pos,
             };
@@ -260,7 +347,7 @@ impl Tokenizer {
             Some(operator) => {
                 self.bump();
                 let end = self.current_pos;
-                return Token { kind: TokenKind::OPERATOR(operator), start, end };
+                return Token { kind: TokenKind::Operator(operator), start, end };
             },
             None => {},
         }
@@ -269,28 +356,46 @@ impl Tokenizer {
             return self.eat_identifier(start);
         } else if self.is_number_start(b) {
             return self.eat_number(start);
+        } else if b == b'"' || b == b'\'' {
+            return self.eat_string_literal();
         } else if b == b';' {
             let end = self.current_pos;
             self.bump();
-            return Token { kind: TokenKind::SEMICOLON, start, end };
+            return Token { kind: TokenKind::Semicolon, start, end };
         }
-
         self.bump();
+
         let end = self.current_pos;
-        Token { kind: TokenKind::UNKNOWN, start, end }
+        self.lex_error(LexError::UnexpectedChar(b), start, end);
+        Token { kind: TokenKind::Error, start, end }
     }
 }
 
-pub fn tokenize(input: &str) {
+pub fn tokenize(_input: &str) {
     let mut tokenizer = Tokenizer {
-        input_str: String::from("1..2 1234 1. .2.3 1+2 1e6 1.4e+62 1e-2 e2 123.445 4 1e . integer"),
+        input_str: String::from("\nabc.\nabc.\n"),
         current_pos: 0,
+        errors: Vec::new(),
+        line_starts: Vec::new(),
     };
+    tokenizer.compute_line_starts();
 
     loop {
         let token = tokenizer.advance_token();
+        if token.kind == TokenKind::Whitespace { continue; }
         println!("{:?} {:?}", token.kind, tokenizer.input_str[token.start..token.end].to_string());
-        if token.kind == TokenKind::EOF { break; }
+        if token.kind == TokenKind::Eof { break; }
+    }
+
+    println!("\nerrors:");
+    for i in &tokenizer.errors {
+        println!("{:?} {:?}", i.kind, tokenizer.input_str[i.start..i.end].to_string());
+        let (line, col) = tokenizer.line_col(i.start);
+        println!("line: {}, col: {}", line+1, col+1);
+        match i.kind {
+            LexError::UnterminatedString(delim) => println!("\tUnterminated string with delimiter: {}", delim as char),
+            _ => {},
+        }
     }
 
     println!("reached end of the tokenizer");
