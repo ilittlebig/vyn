@@ -39,6 +39,8 @@ pub enum TokenKind {
     Whitespace,
     Identifier,
     StringLiteral,
+    LParen,
+    RParen,
     Keyword(Keyword),
     Operator(Operator),
     Assignment,
@@ -375,6 +377,12 @@ impl Lexer {
         } else if b == b'=' {
             self.bump();
             return Token { kind: TokenKind::Assignment, start, end: self.current_pos };
+        } else if b == b'(' {
+            self.bump();
+            return Token { kind: TokenKind::LParen, start, end: self.current_pos };
+        } else if b == b')' {
+            self.bump();
+            return Token { kind: TokenKind::RParen, start, end: self.current_pos };
         }
         self.bump();
 

@@ -160,6 +160,12 @@ impl Parser {
         })?;
 
         match &token.kind {
+            TokenKind::LParen => {
+                self.bump();
+                let expr = self.parse_expr_bp(0)?;
+                self.expect(Expected::Token(TokenKind::RParen))?;
+                return Ok(expr);
+            },
             TokenKind::StringLiteral => {
                 let value = self.slice(token).to_string();
                 self.bump();
