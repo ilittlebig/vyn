@@ -69,17 +69,22 @@ impl Parser {
         self.tokens.get(self.current_index)
     }
 
-    fn bump(&mut self) -> &Token {
+    fn bump(&mut self) -> Token {
         let i = self.current_index;
         self.current_index += 1;
-        &self.tokens[i]
+        self.tokens[i].clone()
     }
 
     fn slice(&self, token: &Token) -> &str {
         &self.src[token.start..token.end]
     }
 
-    fn expect(&mut self, expected: Expected) -> Result<&Token, ParseError> {
+    fn expect_ident(&mut self) -> Result<String, ParseError> {
+        let token = self.expect(Expected::Identifier)?;
+        Ok(self.slice(&token).to_string())
+    }
+
+    fn expect(&mut self, expected: Expected) -> Result<Token, ParseError> {
         let token = self.peek().ok_or(ParseError {
             expected: expected.clone(),
             found: TokenKind::Eof,
@@ -98,7 +103,7 @@ impl Parser {
         Ok(self.bump())
     }
 
-    fn consume_if(&mut self, expected: Expected) -> Option<&Token> {
+    fn consume_if(&mut self, expected: Expected) -> Option<Token> {
         let token = self.peek()?;
         if expected.matches(&token.kind) {
             Some(self.bump())
@@ -143,7 +148,7 @@ impl Parser {
             },
             _ => Err(ParseError {
                 expected: Expected::PrimaryExpression,
-                found: token.kind,
+                found: token.kind.clone(),
                 start: token.start,
                 end: token.end,
             }),
@@ -180,18 +185,22 @@ impl Parser {
     // local name (":" type)? ("=" expr)? ";"?
     fn parse_decl_stmt(&mut self) -> Result<Stmt, ParseError> {
         self.expect(Expected::Keyword(Keyword::Local))?;
-        self.expect(Expected::Identifier)?;
 
-        if self.consume_if(Expected::Token(TokenKind::Colon)).is_some() {
-            self.expect(Expected::Identifier)?;
-        }
+        let name = self.expect_ident()?;
+        let ty = if self.consume_if(Expected::Token(TokenKind::Colon)).is_some() {
+            Some(TypeRef::Named(self.expect_ident()?))
+        } else {
+            None
+        };
 
-        if self.consume_if(Expected::Token(TokenKind::Assignment)).is_some() {
-            self.parse_expr()?;
-        }
+        let init = if self.consume_if(Expected::Token(TokenKind::Assignment)).is_some() {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
 
         self.consume_if(Expected::Token(TokenKind::Semicolon));
-        Ok(Stmt::Decl { name: String::from("a"), ty: None, init: None })
+        Ok(Stmt::Decl { name, ty, init })
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
@@ -219,12 +228,6 @@ pub fn parse_program(src: String) {
 
     while let Some(token) = parser.peek() {
         if token.kind == TokenKind::Eof { break; }
-        /*
-        match parser.parse_stmt() {
-            Ok(_) => {},
-            Err(e) => { println!("{:?}", e); },
-        }
-        */
         println!("{:?}", parser.parse_stmt().unwrap());
         parser.bump();
     }

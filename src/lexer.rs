@@ -34,7 +34,7 @@ pub enum Operator {
     Modulus
 }
 
-#[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum TokenKind {
     Whitespace,
     Identifier,
@@ -50,7 +50,7 @@ pub enum TokenKind {
     Eof,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Token {
     pub kind: TokenKind,
     pub start: usize,
