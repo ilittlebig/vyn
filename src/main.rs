@@ -1,8 +1,9 @@
 use std::fs;
-mod tokenizer;
+mod parser;
+mod lexer;
 
 fn main() {
     let contents = fs::read_to_string("./src/sample_input.vyn")
         .expect("should have been able to read the file");
-    tokenizer::tokenize(contents);
+    parser::parse_program(contents);
 }

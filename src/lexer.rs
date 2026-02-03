@@ -10,7 +10,7 @@ enum MantissaKind { Int, Float }
 enum MantissaError { MissingDigits }
 enum ExponentError { MissingDigits }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum LexError {
     UnexpectedEof,
     UnterminatedString(u8),
@@ -21,12 +21,12 @@ enum LexError {
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
-enum Keyword {
+pub enum Keyword {
     Local,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
-enum Operator {
+pub enum Operator {
     Plus,
     Minus,
     Division,
@@ -34,8 +34,8 @@ enum Operator {
     Modulus
 }
 
-#[derive(PartialEq, Debug)]
-enum TokenKind {
+#[derive(PartialEq, Clone, Debug)]
+pub enum TokenKind {
     Whitespace,
     Identifier,
     StringLiteral,
@@ -51,27 +51,35 @@ enum TokenKind {
 }
 
 #[derive(Debug)]
-struct Token {
-    kind: TokenKind,
-    start: usize,
-    end: usize,
+pub struct Token {
+    pub kind: TokenKind,
+    pub start: usize,
+    pub end: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct LexDiagnostic {
     kind: LexError,
     start: usize,
     end: usize,
 }
 
-struct Tokenizer {
-    input_str: String,
+struct Lexer {
+    src: String,
     current_pos: usize,
     errors: Vec<LexDiagnostic>,
     line_starts: Vec<usize>,
 }
 
-impl Tokenizer {
+#[derive(Debug)]
+pub struct LexerOutput {
+    pub src: String,
+    pub tokens: Vec<Token>,
+    pub errors: Vec<LexDiagnostic>,
+    pub line_starts: Vec<usize>,
+}
+
+impl Lexer {
     fn is_identifier_start(&self, b: u8) -> bool {
         b == b'_' || b.is_ascii_alphabetic()
     }
@@ -86,14 +94,14 @@ impl Tokenizer {
     }
 
     fn peek2(&self) -> Option<(u8, u8)> {
-        let bytes = self.input_str.as_bytes();
+        let bytes = self.src.as_bytes();
         let b0 = bytes.get(self.current_pos).copied()?;
         let b1 = bytes.get(self.current_pos+1).copied()?;
         Some((b0, b1))
     }
 
     fn peek(&self) -> Option<u8> {
-        self.input_str.as_bytes().get(self.current_pos).copied()
+        self.src.as_bytes().get(self.current_pos).copied()
     }
 
     fn bump(&mut self) {
@@ -144,7 +152,7 @@ impl Tokenizer {
         let mut byte_index: usize = 0;
         self.line_starts.push(byte_index);
 
-        let bytes = self.input_str.as_bytes();
+        let bytes = self.src.as_bytes();
         while byte_index < bytes.len() {
             let b = bytes[byte_index];
             byte_index += 1;
@@ -169,7 +177,7 @@ impl Tokenizer {
             self.bump();
         }
 
-        let lexeme = &self.input_str[start..self.current_pos];
+        let lexeme = &self.src[start..self.current_pos];
         if let Some(keyword_kind) = self.lookup_keyword(lexeme) {
             return Token {
                 kind: TokenKind::Keyword(keyword_kind),
@@ -376,32 +384,28 @@ impl Tokenizer {
     }
 }
 
-pub fn tokenize(input: String) {
-    let mut tokenizer = Tokenizer {
-        input_str: input,
+pub fn tokenize(input: String) -> LexerOutput {
+    let mut lexer = Lexer {
+        src: input.clone(),
         current_pos: 0,
         errors: Vec::new(),
         line_starts: Vec::new(),
     };
-    tokenizer.compute_line_starts();
+    lexer.compute_line_starts();
+
+    let mut lexer_output = LexerOutput {
+        src: input.clone(),
+        tokens: Vec::new(),
+        errors: lexer.errors.clone(),
+        line_starts: lexer.line_starts.clone(),
+    };
 
     loop {
-        let token = tokenizer.advance_token();
-        if token.kind == TokenKind::Whitespace { continue; }
-        println!("{:?} {:?}", token.kind, tokenizer.input_str[token.start..token.end].to_string());
-        if token.kind == TokenKind::Eof { break; }
+        let token = lexer.advance_token();
+        let kind = token.kind.clone();
+        if kind == TokenKind::Whitespace { continue; }
+        lexer_output.tokens.push(token);
+        if kind == TokenKind::Eof { break; }
     }
-
-    println!("\nerrors:");
-    for i in &tokenizer.errors {
-        println!("{:?} {:?}", i.kind, tokenizer.input_str[i.start..i.end].to_string());
-        let (line, col) = tokenizer.line_col(i.start);
-        println!("line: {}, col: {}", line+1, col+1);
-        match i.kind {
-            LexError::UnterminatedString(delim) => println!("\tUnterminated string with delimiter: {}", delim as char),
-            _ => {},
-        }
-    }
-
-    println!("reached end of the tokenizer");
+    return lexer_output;
 }
