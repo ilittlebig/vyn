@@ -1,1 +1,2 @@
+// this is a comment
 local a: int = (1 + 2) * 3;

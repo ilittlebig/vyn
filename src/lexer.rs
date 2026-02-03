@@ -39,6 +39,7 @@ pub enum TokenKind {
     Whitespace,
     Identifier,
     StringLiteral,
+    Comment,
     LParen,
     RParen,
     Keyword(Keyword),
@@ -352,6 +353,13 @@ impl Lexer {
             return self.eat_whitespace();
         }
 
+        if matches!(self.peek2(), Some((b'/', b'/'))) {
+            let start = self.current_pos;
+            self.consume_while(|b| b == b'/');
+            self.consume_while(|b| b != b'\n');
+            return Token { kind: TokenKind::Comment, start, end: self.current_pos };
+        }
+
         let start = self.current_pos;
         match self.peek().and_then(|b| self.lookup_operator(b)) {
             Some(operator) => {
@@ -412,6 +420,7 @@ pub fn tokenize(input: String) -> LexerOutput {
         let token = lexer.advance_token();
         let kind = token.kind.clone();
         if kind == TokenKind::Whitespace { continue; }
+        if kind == TokenKind::Comment { continue; }
         lexer_output.tokens.push(token);
         if kind == TokenKind::Eof { break; }
     }
