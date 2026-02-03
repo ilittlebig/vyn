@@ -47,7 +47,8 @@ enum Expr {
 
 #[derive(Debug)]
 enum Stmt {
-    Decl { name: String, ty: Option<TypeRef>, init: Option<Expr> }
+    Decl { name: String, ty: Option<TypeRef>, init: Option<Expr> },
+    ExprStmt(Expr),
 }
 
 #[derive(Debug)]
@@ -178,8 +179,9 @@ impl Parser {
         self.parse_expr_bp(0)
     }
 
-    fn parse_expr_stmt(&mut self) {
-        // TODO: not implemented yet
+    fn parse_expr_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let expr = self.parse_expr()?;
+        Ok(Stmt::ExprStmt(expr))
     }
 
     // local name (":" type)? ("=" expr)? ";"?
@@ -207,6 +209,8 @@ impl Parser {
         let token = self.peek().unwrap();
         if token.kind == TokenKind::Keyword(Keyword::Local) {
             return self.parse_decl_stmt();
+        } else {
+            return self.parse_expr_stmt();
         }
 
         Err(ParseError {
@@ -229,6 +233,5 @@ pub fn parse_program(src: String) {
     while let Some(token) = parser.peek() {
         if token.kind == TokenKind::Eof { break; }
         println!("{:?}", parser.parse_stmt().unwrap());
-        parser.bump();
     }
 }
