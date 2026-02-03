@@ -71,63 +71,66 @@ impl Parser {
         Ok(())
     }
 
+    fn consume_if(&mut self, expected: Expected) -> bool {
+        let Some(token) = self.peek() else { return false };
+        if !expected.matches(&token.kind) {
+            return false;
+        }
+
+        self.next();
+        return true;
+    }
+
+    // should ideally never be used as an api
     fn next(&mut self) {
-        if self.current_index == self.src.len() { return; }
+        if self.current_index == self.tokens.len() { return; }
         self.current_index += 1;
     }
 
-    fn parse_decl_stmt(&mut self) {
-        match self.expect(Expected::Keyword(Keyword::Local)) {
-            Ok(_) => { println!("consumed local"); },
-            Err(e) => { println!("{:?}", e); },
-        }
-        match self.expect(Expected::Identifier) {
-            Ok(_) => { println!("consumed identifier"); },
-            Err(e) => { println!("{:?}", e); },
-        }
-        match self.expect(Expected::Token(TokenKind::Colon)) {
-            Ok(_) => { println!("consumed colon"); },
-            Err(e) => { println!("{:?}", e); },
-        }
-        match self.expect(Expected::Token(TokenKind::Identifier)) {
-            Ok(_) => { println!("consumed identifier"); },
-            Err(e) => { println!("{:?}", e); },
-        }
-        match self.expect(Expected::Token(TokenKind::Assignment)) {
-            Ok(_) => { println!("consumed assignment"); },
-            Err(e) => { println!("{:?}", e); },
-        }
-        match self.expect(Expected::Token(TokenKind::Integer)) {
-            Ok(_) => { println!("consumed integer"); },
-            Err(e) => { println!("{:?}", e); },
-        }
-        match self.expect(Expected::Operator(Operator::Plus)) {
-            Ok(_) => { println!("consumed plus"); },
-            Err(e) => { println!("{:?}", e); },
-        }
-        match self.expect(Expected::Token(TokenKind::Integer)) {
-            Ok(_) => { println!("consumed integer"); },
-            Err(e) => { println!("{:?}", e); },
-        }
-        match self.expect(Expected::Operator(Operator::Multiplication)) {
-            Ok(_) => { println!("consumed multiplication"); },
-            Err(e) => { println!("{:?}", e); },
-        }
-        match self.expect(Expected::Token(TokenKind::Integer)) {
-            Ok(_) => { println!("consumed integer"); },
-            Err(e) => { println!("{:?}", e); },
-        }
-        match self.expect(Expected::Token(TokenKind::Semicolon)) {
-            Ok(_) => { println!("consumed semicolon"); },
-            Err(e) => { println!("{:?}", e); },
-        }
+    // TODO: research Operator-precedence parser
+    fn parse_expr(&mut self) {
+        self.consume_if(Expected::Token(TokenKind::Integer));
+        self.consume_if(Expected::Operator(Operator::Plus));
+        self.consume_if(Expected::Token(TokenKind::Integer));
+        self.consume_if(Expected::Operator(Operator::Multiplication));
+        self.consume_if(Expected::Token(TokenKind::Integer));
     }
 
-    fn parse_stmt(&mut self) {
+    fn parse_type(&mut self) -> Result<(), ParseError> {
+        self.expect(Expected::Identifier)?;
+        Ok(())
+    }
+
+    fn parse_expr_stmt(&mut self) -> Result<(), ParseError> {
+        self.parse_expr();
+        self.consume_if(Expected::Token(TokenKind::Semicolon))
+    }
+
+    // local name (":" type)? ("=" expr)? ";"?
+    fn parse_decl_stmt(&mut self) -> Result<(), ParseError> {
+        self.expect(Expected::Keyword(Keyword::Local))?;
+        self.expect(Expected::Identifier)?;
+
+        if self.consume_if(Expected::Token(TokenKind::Colon)) {
+            self.parse_type()?;
+        }
+
+        if self.consume_if(Expected::Token(TokenKind::Assignment)) {
+            self.parse_expr();
+        }
+
+        self.consume_if(Expected::Token(TokenKind::Semicolon));
+        Ok(())
+    }
+
+    fn parse_stmt(&mut self) -> Result<(), ParseError> {
         let token = self.peek().unwrap(); // TODO: do something about this unwrap
         if token.kind == TokenKind::Keyword(Keyword::Local) {
             return self.parse_decl_stmt();
+        } else {
+            return self.parse_expr_stmt();
         }
+        Ok(())
     }
 }
 
@@ -141,7 +144,10 @@ pub fn parse_program(src: String) {
 
     while let Some(token) = parser.peek() {
         if token.kind == TokenKind::Eof { break; }
-        parser.parse_stmt();
+        match parser.parse_stmt() {
+            Ok(_) => {},
+            Err(e) => { println!("{:?}", e); },
+        }
         parser.next();
     }
 }
