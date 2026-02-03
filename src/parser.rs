@@ -37,7 +37,7 @@ enum TypeRef {
 }
 
 #[derive(Debug)]
-enum Expr {
+pub enum Expr {
     String(String),
     Int(i64),
     Ident(String),
@@ -46,13 +46,13 @@ enum Expr {
 }
 
 #[derive(Debug)]
-enum Stmt {
+pub enum Stmt {
     Decl { name: String, ty: Option<TypeRef>, init: Option<Expr> },
     ExprStmt(Expr),
 }
 
 #[derive(Debug)]
-struct ParseError {
+pub struct ParseError {
     expected: Expected,
     found: TokenKind,
     start: usize,
@@ -66,6 +66,20 @@ struct Parser {
 }
 
 impl Parser {
+    fn at_eof(&self) -> bool {
+        matches!(self.peek().map(|t| &t.kind), Some(TokenKind::Eof) | None)
+    }
+
+    fn is_stmt_start(&self, token_kind: &TokenKind) -> bool {
+        matches!(token_kind,
+            TokenKind::StringLiteral
+            | TokenKind::Integer
+            | TokenKind::Double
+            | TokenKind::Identifier
+            | TokenKind::Keyword(Keyword::Local)
+        )
+    }
+
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.current_index)
     }
@@ -110,6 +124,20 @@ impl Parser {
             Some(self.bump())
         } else {
             None
+        }
+    }
+
+    fn sync_after_error(&mut self) {
+        while let Some(token) = self.peek() {
+            match &token.kind {
+                TokenKind::Semicolon => {
+                    self.bump();
+                    break;
+                },
+                k if self.is_stmt_start(k) => break,
+                TokenKind::Eof => break,
+                _ => { self.bump(); }
+            }
         }
     }
 
@@ -179,8 +207,10 @@ impl Parser {
         self.parse_expr_bp(0)
     }
 
+    // expr ";"?
     fn parse_expr_stmt(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.parse_expr()?;
+        self.consume_if(Expected::Token(TokenKind::Semicolon));
         Ok(Stmt::ExprStmt(expr))
     }
 
@@ -212,17 +242,10 @@ impl Parser {
         } else {
             return self.parse_expr_stmt();
         }
-
-        Err(ParseError {
-            expected: Expected::Identifier,
-            found: TokenKind::Keyword(Keyword::Local),
-            start: 0,
-            end: 0,
-        })
     }
 }
 
-pub fn parse_program(src: String) {
+pub fn parse_program(src: String) -> (Vec<Stmt>, Vec<ParseError>) {
     let lexer_output = lexer::tokenize(src);
     let mut parser = Parser {
         src: lexer_output.src,
@@ -230,8 +253,18 @@ pub fn parse_program(src: String) {
         current_index: 0,
     };
 
+    let mut stmts = Vec::new();
+    let mut errors = Vec::new();
+
     while let Some(token) = parser.peek() {
         if token.kind == TokenKind::Eof { break; }
-        println!("{:?}", parser.parse_stmt().unwrap());
+        match parser.parse_stmt() {
+            Ok(stmt) => stmts.push(stmt),
+            Err(e) => {
+                errors.push(e);
+                parser.sync_after_error();
+            },
+        }
     }
+    (stmts, errors)
 }
