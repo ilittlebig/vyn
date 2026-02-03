@@ -6,14 +6,14 @@
  **/
 
 use crate::lexer;
-use crate::lexer::{Token, TokenKind, Keyword};
+use crate::lexer::{Token, TokenKind, Keyword, Operator};
 
 #[derive(Debug)]
 enum Expected {
     Identifier,
     AnyKeyword,
     Keyword(Keyword),
-    Operator,
+    Operator(Operator),
     Token(TokenKind),
 }
 
@@ -23,7 +23,7 @@ impl Expected {
             Expected::Identifier => matches!(token_kind, TokenKind::Identifier),
             Expected::AnyKeyword => matches!(token_kind, TokenKind::Keyword(_)),
             Expected::Keyword(k) => matches!(token_kind, TokenKind::Keyword(k2) if k2 == k),
-            Expected::Operator => matches!(token_kind, TokenKind::Operator(_)),
+            Expected::Operator(o) => matches!(token_kind, TokenKind::Operator(o2) if o2 == o),
             Expected::Token(exact) => token_kind == exact,
         }
     }
@@ -75,6 +75,60 @@ impl Parser {
         if self.current_index == self.src.len() { return; }
         self.current_index += 1;
     }
+
+    fn parse_decl_stmt(&mut self) {
+        match self.expect(Expected::Keyword(Keyword::Local)) {
+            Ok(_) => { println!("consumed local"); },
+            Err(e) => { println!("{:?}", e); },
+        }
+        match self.expect(Expected::Identifier) {
+            Ok(_) => { println!("consumed identifier"); },
+            Err(e) => { println!("{:?}", e); },
+        }
+        match self.expect(Expected::Token(TokenKind::Colon)) {
+            Ok(_) => { println!("consumed colon"); },
+            Err(e) => { println!("{:?}", e); },
+        }
+        match self.expect(Expected::Token(TokenKind::Identifier)) {
+            Ok(_) => { println!("consumed identifier"); },
+            Err(e) => { println!("{:?}", e); },
+        }
+        match self.expect(Expected::Token(TokenKind::Assignment)) {
+            Ok(_) => { println!("consumed assignment"); },
+            Err(e) => { println!("{:?}", e); },
+        }
+        match self.expect(Expected::Token(TokenKind::Integer)) {
+            Ok(_) => { println!("consumed integer"); },
+            Err(e) => { println!("{:?}", e); },
+        }
+        match self.expect(Expected::Operator(Operator::Plus)) {
+            Ok(_) => { println!("consumed plus"); },
+            Err(e) => { println!("{:?}", e); },
+        }
+        match self.expect(Expected::Token(TokenKind::Integer)) {
+            Ok(_) => { println!("consumed integer"); },
+            Err(e) => { println!("{:?}", e); },
+        }
+        match self.expect(Expected::Operator(Operator::Multiplication)) {
+            Ok(_) => { println!("consumed multiplication"); },
+            Err(e) => { println!("{:?}", e); },
+        }
+        match self.expect(Expected::Token(TokenKind::Integer)) {
+            Ok(_) => { println!("consumed integer"); },
+            Err(e) => { println!("{:?}", e); },
+        }
+        match self.expect(Expected::Token(TokenKind::Semicolon)) {
+            Ok(_) => { println!("consumed semicolon"); },
+            Err(e) => { println!("{:?}", e); },
+        }
+    }
+
+    fn parse_stmt(&mut self) {
+        let token = self.peek().unwrap(); // TODO: do something about this unwrap
+        if token.kind == TokenKind::Keyword(Keyword::Local) {
+            return self.parse_decl_stmt();
+        }
+    }
 }
 
 pub fn parse_program(src: String) {
@@ -87,12 +141,7 @@ pub fn parse_program(src: String) {
 
     while let Some(token) = parser.peek() {
         if token.kind == TokenKind::Eof { break; }
-        match parser.expect(Expected::Keyword(Keyword::Local)) {
-            Ok(_) => { println!("CONSUMED LOCAL"); },
-            Err(e) => {
-                parser.next();
-                println!("{:?}", e);
-            }
-        }
+        parser.parse_stmt();
+        parser.next();
     }
 }
