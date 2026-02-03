@@ -34,7 +34,7 @@ pub enum Operator {
     Modulus
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 pub enum TokenKind {
     Whitespace,
     Identifier,

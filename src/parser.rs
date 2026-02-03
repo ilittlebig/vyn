@@ -8,13 +8,14 @@
 use crate::lexer;
 use crate::lexer::{Token, TokenKind, Keyword, Operator};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Expected {
     Identifier,
     AnyKeyword,
     Keyword(Keyword),
     Operator(Operator),
     Token(TokenKind),
+    PrimaryExpression,
 }
 
 impl Expected {
@@ -25,8 +26,28 @@ impl Expected {
             Expected::Keyword(k) => matches!(token_kind, TokenKind::Keyword(k2) if k2 == k),
             Expected::Operator(o) => matches!(token_kind, TokenKind::Operator(o2) if o2 == o),
             Expected::Token(exact) => token_kind == exact,
+            _ => false,
         }
     }
+}
+
+#[derive(Debug)]
+enum TypeRef {
+    Named(String) // int, string
+}
+
+#[derive(Debug)]
+enum Expr {
+    String(String),
+    Int(i64),
+    Ident(String),
+
+    Binary { lhs: Box<Expr>, op: Operator, rhs: Box<Expr> }
+}
+
+#[derive(Debug)]
+enum Stmt {
+    Decl { name: String, ty: Option<TypeRef>, init: Option<Expr> }
 }
 
 #[derive(Debug)]
@@ -48,15 +69,23 @@ impl Parser {
         self.tokens.get(self.current_index)
     }
 
-    fn expect(&mut self, expected: Expected) -> Result<(), ParseError> {
-        let Some(token) = self.peek() else {
-            return Err(ParseError {
-                expected,
-                found: TokenKind::Eof,
-                start: self.src.len(),
-                end: self.src.len(),
-            });
-        };
+    fn bump(&mut self) -> &Token {
+        let i = self.current_index;
+        self.current_index += 1;
+        &self.tokens[i]
+    }
+
+    fn slice(&self, token: &Token) -> &str {
+        &self.src[token.start..token.end]
+    }
+
+    fn expect(&mut self, expected: Expected) -> Result<&Token, ParseError> {
+        let token = self.peek().ok_or(ParseError {
+            expected: expected.clone(),
+            found: TokenKind::Eof,
+            start: self.src.len(),
+            end: self.src.len(),
+        })?;
 
         if !expected.matches(&token.kind) {
             return Err(ParseError {
@@ -66,71 +95,117 @@ impl Parser {
                 end: token.end,
             });
         }
-
-        self.next();
-        Ok(())
+        Ok(self.bump())
     }
 
-    fn consume_if(&mut self, expected: Expected) -> bool {
-        let Some(token) = self.peek() else { return false };
-        if !expected.matches(&token.kind) {
-            return false;
+    fn consume_if(&mut self, expected: Expected) -> Option<&Token> {
+        let token = self.peek()?;
+        if expected.matches(&token.kind) {
+            Some(self.bump())
+        } else {
+            None
         }
-
-        self.next();
-        return true;
     }
 
-    // should ideally never be used as an api
-    fn next(&mut self) {
-        if self.current_index == self.tokens.len() { return; }
-        self.current_index += 1;
+    fn infix_binding_power(&self, token_kind: &TokenKind) -> Option<(u8, u8)> {
+        match token_kind {
+            TokenKind::Operator(op) => match op {
+                Operator::Plus | Operator::Minus => Some((10, 11)),
+                Operator::Multiplication | Operator::Division | Operator::Modulus => Some((20, 21)),
+            },
+            _ => None,
+        }
     }
 
-    // TODO: research Operator-precedence parser
-    fn parse_expr(&mut self) {
-        self.consume_if(Expected::Token(TokenKind::Integer));
-        self.consume_if(Expected::Operator(Operator::Plus));
-        self.consume_if(Expected::Token(TokenKind::Integer));
-        self.consume_if(Expected::Operator(Operator::Multiplication));
-        self.consume_if(Expected::Token(TokenKind::Integer));
+    fn parse_primary(&mut self) -> Result<Expr, ParseError> {
+        let token = self.peek().ok_or(ParseError {
+            expected: Expected::PrimaryExpression,
+            found: TokenKind::Eof,
+            start: self.src.len(),
+            end: self.src.len(),
+        })?;
+
+        match &token.kind {
+            TokenKind::StringLiteral => {
+                let value = self.slice(token).to_string();
+                self.bump();
+                return Ok(Expr::String(value));
+            },
+            TokenKind::Integer => {
+                let value = self.slice(token).to_string();
+                self.bump();
+                return Ok(Expr::Int(value.parse().unwrap()));
+            },
+            TokenKind::Identifier => {
+                let value = self.slice(token).to_string();
+                self.bump();
+                return Ok(Expr::Ident(value));
+            },
+            _ => Err(ParseError {
+                expected: Expected::PrimaryExpression,
+                found: token.kind,
+                start: token.start,
+                end: token.end,
+            }),
+        }
     }
 
-    fn parse_type(&mut self) -> Result<(), ParseError> {
-        self.expect(Expected::Identifier)?;
-        Ok(())
+    fn parse_expr_bp(&mut self, min_bp: u8) -> Result<Expr, ParseError> {
+        let mut lhs = self.parse_primary()?;
+        while let Some(token) = self.peek() {
+            let Some((l_bp, r_bp)) = self.infix_binding_power(&token.kind) else {
+                break;
+            };
+            if l_bp < min_bp { break; }
+
+            let op = match &self.bump().kind {
+                TokenKind::Operator(op) => *op,
+                _ => unreachable!(),
+            };
+
+            let rhs = self.parse_expr_bp(r_bp)?;
+            lhs = Expr::Binary { lhs: Box::new(lhs), op, rhs: Box::new(rhs) };
+        }
+        Ok(lhs)
     }
 
-    fn parse_expr_stmt(&mut self) -> Result<(), ParseError> {
-        self.parse_expr();
-        self.consume_if(Expected::Token(TokenKind::Semicolon))
+    fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+        self.parse_expr_bp(0)
+    }
+
+    fn parse_expr_stmt(&mut self) {
+        // TODO: not implemented yet
     }
 
     // local name (":" type)? ("=" expr)? ";"?
-    fn parse_decl_stmt(&mut self) -> Result<(), ParseError> {
+    fn parse_decl_stmt(&mut self) -> Result<Stmt, ParseError> {
         self.expect(Expected::Keyword(Keyword::Local))?;
         self.expect(Expected::Identifier)?;
 
-        if self.consume_if(Expected::Token(TokenKind::Colon)) {
-            self.parse_type()?;
+        if self.consume_if(Expected::Token(TokenKind::Colon)).is_some() {
+            self.expect(Expected::Identifier)?;
         }
 
-        if self.consume_if(Expected::Token(TokenKind::Assignment)) {
-            self.parse_expr();
+        if self.consume_if(Expected::Token(TokenKind::Assignment)).is_some() {
+            self.parse_expr()?;
         }
 
         self.consume_if(Expected::Token(TokenKind::Semicolon));
-        Ok(())
+        Ok(Stmt::Decl { name: String::from("a"), ty: None, init: None })
     }
 
-    fn parse_stmt(&mut self) -> Result<(), ParseError> {
-        let token = self.peek().unwrap(); // TODO: do something about this unwrap
+    fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let token = self.peek().unwrap();
         if token.kind == TokenKind::Keyword(Keyword::Local) {
             return self.parse_decl_stmt();
-        } else {
-            return self.parse_expr_stmt();
         }
-        Ok(())
+
+        Err(ParseError {
+            expected: Expected::Identifier,
+            found: TokenKind::Keyword(Keyword::Local),
+            start: 0,
+            end: 0,
+        })
     }
 }
 
@@ -144,10 +219,13 @@ pub fn parse_program(src: String) {
 
     while let Some(token) = parser.peek() {
         if token.kind == TokenKind::Eof { break; }
+        /*
         match parser.parse_stmt() {
             Ok(_) => {},
             Err(e) => { println!("{:?}", e); },
         }
-        parser.next();
+        */
+        println!("{:?}", parser.parse_stmt().unwrap());
+        parser.bump();
     }
 }
