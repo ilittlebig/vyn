@@ -27,7 +27,6 @@ enum Keyword {
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 enum Operator {
-    Equal,
     Plus,
     Minus,
     Division,
@@ -42,7 +41,9 @@ enum TokenKind {
     StringLiteral,
     Keyword(Keyword),
     Operator(Operator),
+    Assignment,
     Semicolon,
+    Colon,
     Integer,
     Double,
     Error,
@@ -126,7 +127,6 @@ impl Tokenizer {
 
     fn lookup_operator(&self, b: u8) -> Option<Operator> {
         match b {
-            b'=' => Some(Operator::Equal),
             b'+' => Some(Operator::Plus),
             b'-' => Some(Operator::Minus),
             b'/' => Some(Operator::Division),
@@ -359,9 +359,14 @@ impl Tokenizer {
         } else if b == b'"' || b == b'\'' {
             return self.eat_string_literal();
         } else if b == b';' {
-            let end = self.current_pos;
             self.bump();
-            return Token { kind: TokenKind::Semicolon, start, end };
+            return Token { kind: TokenKind::Semicolon, start, end: self.current_pos };
+        } else if b == b':' {
+            self.bump();
+            return Token { kind: TokenKind::Colon, start, end: self.current_pos };
+        } else if b == b'=' {
+            self.bump();
+            return Token { kind: TokenKind::Assignment, start, end: self.current_pos };
         }
         self.bump();
 
@@ -371,9 +376,9 @@ impl Tokenizer {
     }
 }
 
-pub fn tokenize(_input: &str) {
+pub fn tokenize(input: String) {
     let mut tokenizer = Tokenizer {
-        input_str: String::from("\nabc.\nabc.\n"),
+        input_str: input,
         current_pos: 0,
         errors: Vec::new(),
         line_starts: Vec::new(),
