@@ -19,14 +19,26 @@ pub enum Expected {
 }
 
 impl Expected {
-    fn matches(&self, token_kind: &TokenKind) -> bool {
+    fn matches(&self, kind: &TokenKind) -> bool {
         match self {
-            Expected::Identifier => matches!(token_kind, TokenKind::Identifier),
-            Expected::AnyKeyword => matches!(token_kind, TokenKind::Keyword(_)),
-            Expected::Keyword(k) => matches!(token_kind, TokenKind::Keyword(k2) if k2 == k),
-            Expected::Operator(o) => matches!(token_kind, TokenKind::Operator(o2) if o2 == o),
-            Expected::Token(exact) => token_kind == exact,
+            Expected::Identifier => matches!(kind, TokenKind::Identifier),
+            Expected::AnyKeyword => matches!(kind, TokenKind::Keyword(_)),
+            Expected::Keyword(k) => matches!(kind, TokenKind::Keyword(k2) if k2 == k),
+            Expected::Operator(o) => matches!(kind, TokenKind::Operator(o2) if o2 == o),
+            Expected::Token(exact) => kind == exact,
             _ => false,
+        }
+    }
+
+    pub fn describe(&self) -> &'static str {
+        match self {
+            Expected::Identifier => "an identifier",
+            Expected::AnyKeyword => "a keyword",
+            Expected::Keyword(_) => "that keyword",
+            Expected::Operator(_) => "that operator",
+            Expected::Token(_) => "that token",
+            Expected::PrimaryExpression => "an expression",
+            Expected::Statement => "a statement",
         }
     }
 }
@@ -131,6 +143,16 @@ impl Parser {
         Ok((self.file.slice(&token).to_string(), token.span))
     }
 
+    // in-case EOF is the next token
+    fn expect_closing(&mut self, rparen_kind: TokenKind, open_span: Span) -> Result<Token, ParseError> {
+        let token = self.expect(Expected::Token(rparen_kind))
+            .map_err(|mut e| {
+                e.span = open_span;
+                e
+            })?;
+        Ok(token)
+    }
+
     fn expect(&mut self, expected: Expected) -> Result<Token, ParseError> {
         let token = self.peek().ok_or(ParseError {
             expected: expected.clone(),
@@ -215,9 +237,9 @@ impl Parser {
         match &kind {
             TokenKind::Keyword(Keyword::Function) => {
                 let fn_token = self.bump();
-                self.expect(Expected::Token(TokenKind::LParen))?;
+                let lparen = self.expect(Expected::Token(TokenKind::LParen))?;
                 // TODO: function params
-                self.expect(Expected::Token(TokenKind::RParen))?;
+                self.expect_closing(TokenKind::RParen, lparen.span)?;
 
                 let body = self.parse_block()?;
                 let span = self.join(fn_token.span, body.span);

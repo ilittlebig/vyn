@@ -26,6 +26,15 @@ pub enum Keyword {
     Function,
 }
 
+impl Keyword {
+    pub fn describe(&self) -> &'static str {
+        match self {
+            Keyword::Local => "local",
+            Keyword::Function => "function",
+        }
+    }
+}
+
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum Operator {
     Plus,
@@ -34,6 +43,19 @@ pub enum Operator {
     Multiplication,
     Modulus,
     Not, // !
+}
+
+impl Operator {
+    pub fn describe(&self) -> &'static str {
+        match self {
+            Operator::Plus => "+",
+            Operator::Minus => "-",
+            Operator::Division => "/",
+            Operator::Multiplication => "*",
+            Operator::Modulus => "%",
+            Operator::Not => "!",
+        }
+    }
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -56,6 +78,29 @@ pub enum TokenKind {
     Double,
     Error,
     Eof,
+}
+
+impl TokenKind {
+    pub fn describe(&self) -> String {
+        match self {
+            TokenKind::Identifier => "identifier".into(),
+            TokenKind::StringLiteral => "string literal".into(),
+            TokenKind::LParen => "`(`".into(),
+            TokenKind::RParen => "`)`".into(),
+            TokenKind::LBrace => "`{`".into(),
+            TokenKind::RBrace => "`}`".into(),
+            TokenKind::Keyword(k) => format!("keyword {}", k.describe()).into(),
+            TokenKind::Operator(o) => format!("operator {}", o.describe()).into(),
+            TokenKind::Assignment => "`=`".into(),
+            TokenKind::Semicolon => "`;`".into(),
+            TokenKind::Colon => "`:`".into(),
+            TokenKind::Comma => "`,`".into(),
+            TokenKind::Integer => "integer".into(),
+            TokenKind::Double => "double".into(),
+            TokenKind::Eof => "end of file".into(),
+            _ => "other".into(), // fallback for now
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

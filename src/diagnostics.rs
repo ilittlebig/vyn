@@ -6,7 +6,7 @@
  **/
 
 use std::borrow::Cow;
-use crate::lexer::{ LexError, LexDiagnostic, SourceFile, Span };
+use crate::lexer::{ LexError, LexDiagnostic, SourceFile, Span, TokenKind };
 use crate::parser::{ ParseError, Expected };
 
 #[derive(Debug)]
@@ -38,9 +38,12 @@ impl From<LexDiagnostic> for Diagnostic {
 // parser errors
 impl From<ParseError> for Diagnostic {
     fn from(e: ParseError) -> Self {
-        match e.expected {
-            Expected::Statement => Diagnostic::error("expected statement", e.span),
-            _ => Diagnostic::error(format!("unhandled error: {:?}", e.expected), e.span),
+        let msg = format!("expected {}, found {}", e.expected.describe(), e.found.describe());
+
+        match (&e.expected, &e.found) {
+            (Expected::Statement, _) => Diagnostic::error(msg, e.span),
+            (Expected::Token(TokenKind::RParen), _) => Diagnostic::error("expected `)` to close `(`", e.span),
+            _ => Diagnostic::error(msg, e.span),
         }
     }
 }

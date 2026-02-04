@@ -21,3 +21,5 @@ function() {
 }
 
 f(a, a)
+
+function(
