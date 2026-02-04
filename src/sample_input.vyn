@@ -1,5 +1,7 @@
 // this is a comment
 // local a: int = (1 + 2) * 3;
 
-local a
-local b;
+//local a
+//local b;
+
+local a = "hello world""

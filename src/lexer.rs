@@ -11,7 +11,7 @@ enum MantissaError { MissingDigits }
 enum ExponentError { MissingDigits }
 
 #[derive(Debug, Clone)]
-enum LexError {
+pub enum LexError {
     UnexpectedEof,
     UnterminatedString(u8),
     UnexpectedChar(u8),
@@ -65,9 +65,9 @@ pub struct Token {
 }
 
 #[derive(Debug, Clone)]
-struct LexDiagnostic {
-    kind: LexError,
-    span: Span,
+pub struct LexDiagnostic {
+    pub kind: LexError,
+    pub span: Span,
 }
 
 struct Lexer {
@@ -125,6 +125,27 @@ impl SourceFile {
         };
         let col = pos - self.line_starts[line];
         (line, col)
+    }
+
+    pub fn line_span(&self, pos: usize) -> &str {
+        let (line, _) = self.line_col(pos);
+        let start = self.line_starts[line];
+
+        let mut end = if line + 1 < self.line_starts.len() {
+            self.line_starts[line + 1]
+        } else {
+            self.src.len()
+        };
+
+        let bytes = self.src.as_bytes();
+        if end > start && bytes[end - 1] == b'\n' {
+            end -= 1;
+        }
+
+        if end > start && bytes[end - 1] == b'\r' {
+            end -= 1;
+        }
+        &self.src[start..end]
     }
 }
 
@@ -420,7 +441,7 @@ pub fn tokenize(name: String, input: String) -> LexerOutput {
     let mut lexer_output = LexerOutput {
         file: lexer.file.clone(),
         tokens: Vec::new(),
-        errors: lexer.errors.clone(),
+        errors: Vec::new(),
     };
 
     loop {
@@ -431,5 +452,7 @@ pub fn tokenize(name: String, input: String) -> LexerOutput {
         lexer_output.tokens.push(token);
         if kind == TokenKind::Eof { break; }
     }
+
+    lexer_output.errors = lexer.errors;
     return lexer_output;
 }

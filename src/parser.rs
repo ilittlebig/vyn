@@ -53,9 +53,9 @@ pub enum Stmt {
 
 #[derive(Debug)]
 pub struct ParseError {
-    expected: Expected,
-    found: TokenKind,
-    span: Span,
+    pub expected: Expected,
+    pub found: TokenKind,
+    pub span: Span,
 }
 
 struct Parser {
@@ -261,6 +261,11 @@ pub fn parse_program(file: SourceFile, tokens: Vec<Token>) -> (Vec<Stmt>, Vec<Pa
 
     while let Some(token) = parser.peek() {
         if token.kind == TokenKind::Eof { break; }
+        if matches!(parser.peek().map(|t| &token.kind), Some(TokenKind::Error)) {
+            parser.sync_after_error();
+            continue;
+        }
+
         match parser.parse_stmt() {
             Ok(stmt) => stmts.push(stmt),
             Err(e) => {
