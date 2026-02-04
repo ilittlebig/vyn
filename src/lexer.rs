@@ -23,6 +23,7 @@ pub enum LexError {
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum Keyword {
     Local,
+    Function,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -200,6 +201,7 @@ impl Lexer {
     fn lookup_keyword(&self, lexeme: &str) -> Option<Keyword> {
         match lexeme {
             "local" => Some(Keyword::Local),
+            "function" => Some(Keyword::Function),
             _ => None,
         }
     }

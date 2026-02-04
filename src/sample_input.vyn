@@ -6,4 +6,16 @@
 
 //local a = "hello world"
 
--x*2 // parses as (-x)*2
+//-x;
+//+x
+
+local function name() {
+  local a = 1;
+  local b = "hello";
+}
+
+local a = function() {
+}
+
+function() { // allowed as of now
+}

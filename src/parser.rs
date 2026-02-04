@@ -39,6 +39,12 @@ enum TypeRef {
 enum UnaryOp {
     Neg,
     Not,
+    Plus,
+}
+
+#[derive(Debug)]
+pub struct Block {
+    pub stmts: Vec<Stmt>,
 }
 
 #[derive(Debug)]
@@ -47,14 +53,16 @@ pub enum Expr {
     Int(i64),
     Ident(String),
 
+    Function { body: Box<Block> },
+
     Unary { op: UnaryOp, rhs: Box<Expr> },
-    Binary { lhs: Box<Expr>, op: Operator, rhs: Box<Expr> }
+    Binary { lhs: Box<Expr>, op: Operator, rhs: Box<Expr> },
 }
 
 #[derive(Debug)]
 pub enum Stmt {
     Decl { name: String, ty: Option<TypeRef>, init: Option<Expr> },
-    Block(Vec<Stmt>),
+    Block(Block),
     ExprStmt(Expr),
 }
 
@@ -141,6 +149,7 @@ impl Parser {
         match token_kind {
             TokenKind::Operator(Operator::Minus) => Some((UnaryOp::Neg, 100)),
             TokenKind::Operator(Operator::Not) => Some((UnaryOp::Not, 100)),
+            TokenKind::Operator(Operator::Plus) => Some((UnaryOp::Plus, 100)),
             _ => None,
         }
     }
@@ -170,6 +179,15 @@ impl Parser {
         };
 
         match &token.kind {
+            TokenKind::Keyword(Keyword::Function) => {
+                self.bump();
+                self.expect(Expected::Token(TokenKind::LParen))?;
+                // TODO: function params
+                self.expect(Expected::Token(TokenKind::RParen))?;
+
+                let body = self.parse_block()?;
+                return Ok(Expr::Function { body: Box::new(body) });
+            },
             TokenKind::LParen => {
                 self.bump();
                 let expr = self.parse_expr_bp(0)?;
@@ -229,28 +247,50 @@ impl Parser {
         Ok(Stmt::ExprStmt(expr))
     }
 
-    // local name (":" type)? ("=" expr)? ";"?
+    /*
+     * decl_stmt :=
+     *     "local" (
+     *         "function" Ident func_def
+     *         | Ident (":" type)? ("=" expr)?
+     *     ) ";"? ;
+     *
+     * func_def :=
+     *     "(" params? ")" block ;
+     *
+     * block :=
+     *     "{" stmt* "}" ;
+     */
     fn parse_decl_stmt(&mut self) -> Result<Stmt, ParseError> {
         self.expect(Expected::Keyword(Keyword::Local))?;
 
-        let name = self.expect_ident()?;
-        let ty = if self.consume_if(Expected::Token(TokenKind::Colon)).is_some() {
-            Some(TypeRef::Named(self.expect_ident()?))
-        } else {
-            None
-        };
+        if self.consume_if(Expected::Token(TokenKind::Keyword(Keyword::Function))).is_some() {
+            let name = self.expect_ident()?;
+            self.expect(Expected::Token(TokenKind::LParen))?;
+            // TODO: function params
+            self.expect(Expected::Token(TokenKind::RParen))?;
 
-        let init = if self.consume_if(Expected::Token(TokenKind::Assignment)).is_some() {
-            Some(self.parse_expr()?)
+            let body = self.parse_block()?;
+            Ok(Stmt::Decl { name, ty: None, init: Some(Expr::Function { body: Box::new(body) }) })
         } else {
-            None
-        };
+            let name = self.expect_ident()?;
+            let ty = if self.consume_if(Expected::Token(TokenKind::Colon)).is_some() {
+                Some(TypeRef::Named(self.expect_ident()?))
+            } else {
+                None
+            };
 
-        self.consume_if(Expected::Token(TokenKind::Semicolon));
-        Ok(Stmt::Decl { name, ty, init })
+            let init = if self.consume_if(Expected::Token(TokenKind::Assignment)).is_some() {
+                Some(self.parse_expr()?)
+            } else {
+                None
+            };
+
+            self.consume_if(Expected::Token(TokenKind::Semicolon));
+            Ok(Stmt::Decl { name, ty, init })
+        }
     }
 
-    fn parse_block_stmt(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_block(&mut self) -> Result<Block, ParseError> {
         self.expect(Expected::Token(TokenKind::LBrace))?;
 
         let mut stmts = Vec::new();
@@ -261,7 +301,12 @@ impl Parser {
         }
 
         self.expect(Expected::Token(TokenKind::RBrace))?;
-        Ok(Stmt::Block(stmts))
+        Ok(Block { stmts })
+    }
+
+    fn parse_block_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let body = self.parse_block()?;
+        Ok(Stmt::Block(body))
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
