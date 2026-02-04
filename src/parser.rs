@@ -48,6 +48,7 @@ pub enum Expr {
 #[derive(Debug)]
 pub enum Stmt {
     Decl { name: String, ty: Option<TypeRef>, init: Option<Expr> },
+    Block(Vec<Stmt>),
     ExprStmt(Expr),
 }
 
@@ -241,10 +242,26 @@ impl Parser {
         Ok(Stmt::Decl { name, ty, init })
     }
 
+    fn parse_block_stmt(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(Expected::Token(TokenKind::LBrace))?;
+
+        let mut stmts = Vec::new();
+        while let Some(token) = self.peek() {
+            if token.kind == TokenKind::RBrace { break; }
+            let stmt = self.parse_stmt()?;
+            stmts.push(stmt);
+        }
+
+        self.expect(Expected::Token(TokenKind::RBrace))?;
+        Ok(Stmt::Block(stmts))
+    }
+
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
         let token = self.peek().unwrap();
         if token.kind == TokenKind::Keyword(Keyword::Local) {
             return self.parse_decl_stmt();
+        } else if token.kind == TokenKind::LBrace {
+            return self.parse_block_stmt();
         } else {
             return self.parse_expr_stmt();
         }

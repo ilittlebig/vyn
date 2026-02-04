@@ -42,6 +42,8 @@ pub enum TokenKind {
     Comment,
     LParen,
     RParen,
+    LBrace,
+    RBrace,
     Keyword(Keyword),
     Operator(Operator),
     Assignment,
@@ -391,6 +393,12 @@ impl Lexer {
         } else if b == b')' {
             self.bump();
             return Token { kind: TokenKind::RParen, start, end: self.current_pos };
+        } else if b == b'{' {
+            self.bump();
+            return Token { kind: TokenKind::LBrace, start, end: self.current_pos };
+        } else if b == b'}' {
+            self.bump();
+            return Token { kind: TokenKind::RBrace, start, end: self.current_pos };
         }
         self.bump();
 
