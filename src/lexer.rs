@@ -51,6 +51,7 @@ pub enum TokenKind {
     Assignment,
     Semicolon,
     Colon,
+    Comma,
     Integer,
     Double,
     Error,
@@ -412,6 +413,9 @@ impl Lexer {
         } else if b == b':' {
             self.bump();
             return self.token(TokenKind::Colon, start, self.current_pos);
+        } else if b == b',' {
+            self.bump();
+            return self.token(TokenKind::Comma, start, self.current_pos);
         } else if b == b'=' {
             self.bump();
             return self.token(TokenKind::Assignment, start, self.current_pos);

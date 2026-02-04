@@ -54,6 +54,7 @@ pub enum Expr {
     Ident(String),
 
     Function { body: Box<Block> },
+    Call { callee: Box<Expr>, args: Vec<Expr> },
 
     Unary { op: UnaryOp, rhs: Box<Expr> },
     Binary { lhs: Box<Expr>, op: Operator, rhs: Box<Expr> },
@@ -92,6 +93,10 @@ impl Parser {
 
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.pos)
+    }
+
+    fn peek_is(&self, kind: &TokenKind) -> bool {
+        matches!(self.peek().map(|t| &t.kind), Some(k) if k == kind)
     }
 
     fn bump(&mut self) -> Token {
@@ -217,8 +222,35 @@ impl Parser {
         }
     }
 
+    fn parse_call(&mut self, callee: Expr) -> Result<Expr, ParseError> {
+        self.expect(Expected::Token(TokenKind::LParen))?;
+
+        let mut args = Vec::new();
+        if !self.peek_is(&TokenKind::RParen) {
+            loop {
+                let expr = self.parse_expr()?;
+                args.push(expr);
+
+                // no trailing comma allowed
+                if self.consume_if(Expected::Token(TokenKind::Comma)).is_some() {
+                    let expr = self.parse_expr()?;
+                    args.push(expr);
+                } else {
+                    break;
+                }
+            }
+        }
+
+        self.expect(Expected::Token(TokenKind::RParen))?;
+        Ok(Expr::Call { callee: Box::new(callee), args })
+    }
+
     fn parse_expr_bp(&mut self, min_bp: u8) -> Result<Expr, ParseError> {
         let mut lhs = self.parse_primary()?;
+        while self.peek_is(&TokenKind::LParen) {
+            lhs = self.parse_call(lhs)?;
+        }
+
         while let Some(token) = self.peek() {
             let Some((l_bp, r_bp)) = self.infix_binding_power(&token.kind) else {
                 break;

@@ -19,3 +19,5 @@ local a = function() {
 
 function() { // allowed as of now
 }
+
+f()
