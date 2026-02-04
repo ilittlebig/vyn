@@ -55,33 +55,77 @@ pub enum TokenKind {
     Eof,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct Span { pub start: usize, pub end: usize }
+
 #[derive(Clone, Debug)]
 pub struct Token {
     pub kind: TokenKind,
-    pub start: usize,
-    pub end: usize,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 struct LexDiagnostic {
     kind: LexError,
-    start: usize,
-    end: usize,
+    span: Span,
 }
 
 struct Lexer {
-    src: String,
+    file: SourceFile,
     current_pos: usize,
     errors: Vec<LexDiagnostic>,
-    line_starts: Vec<usize>,
 }
 
 #[derive(Debug)]
 pub struct LexerOutput {
-    pub src: String,
+    pub file: SourceFile,
     pub tokens: Vec<Token>,
     pub errors: Vec<LexDiagnostic>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SourceFile {
+    pub name: String,
+    pub src: String,
     pub line_starts: Vec<usize>,
+}
+
+fn compute_line_starts(src: &String) -> Vec<usize> {
+    let mut line_starts = Vec::new();
+    let mut byte_index: usize = 0;
+    line_starts.push(byte_index);
+
+    let bytes = src.as_bytes();
+    while byte_index < bytes.len() {
+        let b = bytes[byte_index];
+        byte_index += 1;
+        if b == b'\n' { line_starts.push(byte_index); }
+    }
+    line_starts
+}
+
+impl SourceFile {
+    fn new(name: String, src: String) -> Self {
+        let line_starts = compute_line_starts(&src);
+        Self { name, src, line_starts }
+    }
+
+    pub fn len(&self) -> usize {
+        self.src.len()
+    }
+
+    pub fn slice(&self, token: &Token) -> &str {
+        &self.src[token.span.start..token.span.end]
+    }
+
+    pub fn line_col(&self, pos: usize) -> (usize, usize) {
+        let line = match self.line_starts.binary_search(&pos) {
+            Ok(i) => i,
+            Err(k) => k - 1, // only valid if k > 0
+        };
+        let col = pos - self.line_starts[line];
+        (line, col)
+    }
 }
 
 impl Lexer {
@@ -99,14 +143,14 @@ impl Lexer {
     }
 
     fn peek2(&self) -> Option<(u8, u8)> {
-        let bytes = self.src.as_bytes();
+        let bytes = self.file.src.as_bytes();
         let b0 = bytes.get(self.current_pos).copied()?;
         let b1 = bytes.get(self.current_pos+1).copied()?;
         Some((b0, b1))
     }
 
     fn peek(&self) -> Option<u8> {
-        self.src.as_bytes().get(self.current_pos).copied()
+        self.file.src.as_bytes().get(self.current_pos).copied()
     }
 
     fn bump(&mut self) {
@@ -149,29 +193,14 @@ impl Lexer {
         }
     }
 
-    fn lex_error(&mut self, kind: LexError, start: usize, end: usize) {
-        self.errors.push(LexDiagnostic { kind, start, end });
+    fn token(&self, kind: TokenKind, start: usize, end: usize) -> Token {
+        let line_span = Span { start, end };
+        Token { kind, span: line_span }
     }
 
-    fn compute_line_starts(&mut self) {
-        let mut byte_index: usize = 0;
-        self.line_starts.push(byte_index);
-
-        let bytes = self.src.as_bytes();
-        while byte_index < bytes.len() {
-            let b = bytes[byte_index];
-            byte_index += 1;
-            if b == b'\n' { self.line_starts.push(byte_index); }
-        }
-    }
-
-    fn line_col(&self, pos: usize) -> (usize, usize) {
-        let line = match self.line_starts.binary_search(&pos) {
-            Ok(i) => i,
-            Err(k) => k - 1, // only valid if k > 0
-        };
-        let col = pos - self.line_starts[line];
-        (line, col)
+    fn lex_error(&mut self, kind: LexError, start: usize, end: usize) -> Token {
+        self.errors.push(LexDiagnostic { kind, span: Span { start, end }});
+        self.token(TokenKind::Error, start, end)
     }
 
     /*
@@ -182,20 +211,11 @@ impl Lexer {
             self.bump();
         }
 
-        let lexeme = &self.src[start..self.current_pos];
+        let lexeme = &self.file.src[start..self.current_pos];
         if let Some(keyword_kind) = self.lookup_keyword(lexeme) {
-            return Token {
-                kind: TokenKind::Keyword(keyword_kind),
-                start,
-                end: self.current_pos,
-            };
+            return self.token(TokenKind::Keyword(keyword_kind), start, self.current_pos)
         }
-
-        Token {
-            kind: TokenKind::Identifier,
-            start,
-            end: self.current_pos,
-        }
+        self.token(TokenKind::Identifier, start, self.current_pos)
     }
 
     // ( DIGIT+ ( '.' DIGIT* )? | '.' DIGIT+ )
@@ -260,8 +280,7 @@ impl Lexer {
             Ok(kind) => kind,
             Err(_) => {
                 let end = self.current_pos;
-                self.lex_error(LexError::InvalidMantissa, start, end);
-                return Token { kind: TokenKind::Error, start, end };
+                return self.lex_error(LexError::InvalidMantissa, start, end);
             }
         };
 
@@ -269,8 +288,7 @@ impl Lexer {
             Ok(present) => present,
             Err(_) => {
                 let end = self.current_pos;
-                self.lex_error(LexError::InvalidExponent, start, end);
-                return Token { kind: TokenKind::Error, start, end };
+                return self.lex_error(LexError::InvalidExponent, start, end);
             }
         };
 
@@ -279,7 +297,7 @@ impl Lexer {
         } else {
             TokenKind::Integer
         };
-        Token { kind: token_kind, start, end: self.current_pos }
+        self.token(token_kind, start, self.current_pos)
     }
 
     /*
@@ -294,8 +312,7 @@ impl Lexer {
         loop {
             let Some(b) = self.peek() else {
                 let end = self.current_pos;
-                self.lex_error(LexError::UnterminatedString(delimiter), start, end);
-                return Token { kind: TokenKind::Error, start, end };
+                return self.lex_error(LexError::UnterminatedString(delimiter), start, end);
             };
 
             if b == delimiter {
@@ -307,19 +324,13 @@ impl Lexer {
                 self.bump();
                 if self.bump_or_error().is_err() {
                     let end = self.current_pos;
-                    self.lex_error(LexError::DanglingEscape, end - 1, end);
-                    return Token { kind: TokenKind::Error, start, end };
+                    return self.lex_error(LexError::DanglingEscape, end - 1, end);
                 }
             } else {
                 self.bump();
             }
         }
-
-        Token {
-            kind: TokenKind::StringLiteral,
-            start,
-            end: self.current_pos
-        }
+        self.token(TokenKind::StringLiteral, start, self.current_pos)
     }
 
 
@@ -331,12 +342,7 @@ impl Lexer {
         while self.peek().is_some_and(|b| b.is_ascii_whitespace()) {
             self.bump();
         }
-
-        Token {
-            kind: TokenKind::Whitespace,
-            start,
-            end: self.current_pos,
-        }
+        self.token(TokenKind::Whitespace, start, self.current_pos)
     }
 
     /*
@@ -344,11 +350,8 @@ impl Lexer {
      **/
     fn advance_token(&mut self) -> Token {
         let Some(b) = self.peek() else {
-            return Token {
-                kind: TokenKind::Eof,
-                start: self.current_pos,
-                end: self.current_pos,
-            };
+            let current_pos = self.current_pos;
+            return self.token(TokenKind::Eof, current_pos, current_pos)
         };
 
         if b.is_ascii_whitespace() {
@@ -359,7 +362,7 @@ impl Lexer {
             let start = self.current_pos;
             self.consume_while(|b| b == b'/');
             self.consume_while(|b| b != b'\n');
-            return Token { kind: TokenKind::Comment, start, end: self.current_pos };
+            return self.token(TokenKind::Comment, start, self.current_pos);
         }
 
         let start = self.current_pos;
@@ -367,7 +370,7 @@ impl Lexer {
             Some(operator) => {
                 self.bump();
                 let end = self.current_pos;
-                return Token { kind: TokenKind::Operator(operator), start, end };
+                return self.token(TokenKind::Operator(operator), start, end);
             },
             None => {},
         }
@@ -380,48 +383,44 @@ impl Lexer {
             return self.eat_string_literal();
         } else if b == b';' {
             self.bump();
-            return Token { kind: TokenKind::Semicolon, start, end: self.current_pos };
+            return self.token(TokenKind::Semicolon, start, self.current_pos);
         } else if b == b':' {
             self.bump();
-            return Token { kind: TokenKind::Colon, start, end: self.current_pos };
+            return self.token(TokenKind::Colon, start, self.current_pos);
         } else if b == b'=' {
             self.bump();
-            return Token { kind: TokenKind::Assignment, start, end: self.current_pos };
+            return self.token(TokenKind::Assignment, start, self.current_pos);
         } else if b == b'(' {
             self.bump();
-            return Token { kind: TokenKind::LParen, start, end: self.current_pos };
+            return self.token(TokenKind::LParen, start, self.current_pos);
         } else if b == b')' {
             self.bump();
-            return Token { kind: TokenKind::RParen, start, end: self.current_pos };
+            return self.token(TokenKind::RParen, start, self.current_pos);
         } else if b == b'{' {
             self.bump();
-            return Token { kind: TokenKind::LBrace, start, end: self.current_pos };
+            return self.token(TokenKind::LBrace, start, self.current_pos);
         } else if b == b'}' {
             self.bump();
-            return Token { kind: TokenKind::RBrace, start, end: self.current_pos };
+            return self.token(TokenKind::RBrace, start, self.current_pos);
         }
         self.bump();
 
         let end = self.current_pos;
-        self.lex_error(LexError::UnexpectedChar(b), start, end);
-        Token { kind: TokenKind::Error, start, end }
+        self.lex_error(LexError::UnexpectedChar(b), start, end)
     }
 }
 
-pub fn tokenize(input: String) -> LexerOutput {
+pub fn tokenize(name: String, input: String) -> LexerOutput {
     let mut lexer = Lexer {
-        src: input.clone(),
+        file: SourceFile::new(name.clone(), input.clone()),
         current_pos: 0,
         errors: Vec::new(),
-        line_starts: Vec::new(),
     };
-    lexer.compute_line_starts();
 
     let mut lexer_output = LexerOutput {
-        src: input.clone(),
+        file: lexer.file.clone(),
         tokens: Vec::new(),
         errors: lexer.errors.clone(),
-        line_starts: lexer.line_starts.clone(),
     };
 
     loop {

@@ -5,8 +5,7 @@
  * Created: 2026-02-03
  **/
 
-use crate::lexer;
-use crate::lexer::{Token, TokenKind, Keyword, Operator};
+use crate::lexer::{Token, TokenKind, Keyword, Operator, Span, SourceFile};
 
 #[derive(Debug, Clone)]
 enum Expected {
@@ -56,21 +55,16 @@ pub enum Stmt {
 pub struct ParseError {
     expected: Expected,
     found: TokenKind,
-    start: usize,
-    end: usize,
+    span: Span,
 }
 
 struct Parser {
-    src: String,
+    file: SourceFile,
     tokens: Vec<Token>,
-    current_index: usize,
+    pos: usize,
 }
 
 impl Parser {
-    fn at_eof(&self) -> bool {
-        matches!(self.peek().map(|t| &t.kind), Some(TokenKind::Eof) | None)
-    }
-
     fn is_stmt_start(&self, token_kind: &TokenKind) -> bool {
         matches!(token_kind,
             TokenKind::StringLiteral
@@ -82,38 +76,32 @@ impl Parser {
     }
 
     fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.current_index)
+        self.tokens.get(self.pos)
     }
 
     fn bump(&mut self) -> Token {
-        let i = self.current_index;
-        self.current_index += 1;
+        let i = self.pos;
+        self.pos += 1;
         self.tokens[i].clone()
-    }
-
-    fn slice(&self, token: &Token) -> &str {
-        &self.src[token.start..token.end]
     }
 
     fn expect_ident(&mut self) -> Result<String, ParseError> {
         let token = self.expect(Expected::Identifier)?;
-        Ok(self.slice(&token).to_string())
+        Ok(self.file.slice(&token).to_string())
     }
 
     fn expect(&mut self, expected: Expected) -> Result<Token, ParseError> {
         let token = self.peek().ok_or(ParseError {
             expected: expected.clone(),
             found: TokenKind::Eof,
-            start: self.src.len(),
-            end: self.src.len(),
+            span: Span { start: self.file.len(), end: self.file.len() },
         })?;
 
         if !expected.matches(&token.kind) {
             return Err(ParseError {
                 expected,
                 found: token.kind.clone(),
-                start: token.start,
-                end: token.end,
+                span: token.span,
             });
         }
         Ok(self.bump())
@@ -156,8 +144,7 @@ impl Parser {
         let token = self.peek().ok_or(ParseError {
             expected: Expected::PrimaryExpression,
             found: TokenKind::Eof,
-            start: self.src.len(),
-            end: self.src.len(),
+            span: Span { start: self.file.len(), end: self.file.len() },
         })?;
 
         match &token.kind {
@@ -168,25 +155,24 @@ impl Parser {
                 return Ok(expr);
             },
             TokenKind::StringLiteral => {
-                let value = self.slice(token).to_string();
+                let value = self.file.slice(token).to_string();
                 self.bump();
                 return Ok(Expr::String(value));
             },
             TokenKind::Integer => {
-                let value = self.slice(token).to_string();
+                let value = self.file.slice(token).to_string();
                 self.bump();
                 return Ok(Expr::Int(value.parse().unwrap()));
             },
             TokenKind::Identifier => {
-                let value = self.slice(token).to_string();
+                let value = self.file.slice(token).to_string();
                 self.bump();
                 return Ok(Expr::Ident(value));
             },
             _ => Err(ParseError {
                 expected: Expected::PrimaryExpression,
                 found: token.kind.clone(),
-                start: token.start,
-                end: token.end,
+                span: token.span,
             }),
         }
     }
@@ -268,14 +254,8 @@ impl Parser {
     }
 }
 
-pub fn parse_program(src: String) -> (Vec<Stmt>, Vec<ParseError>) {
-    let lexer_output = lexer::tokenize(src);
-    let mut parser = Parser {
-        src: lexer_output.src,
-        tokens: lexer_output.tokens,
-        current_index: 0,
-    };
-
+pub fn parse_program(file: SourceFile, tokens: Vec<Token>) -> (Vec<Stmt>, Vec<ParseError>) {
+    let mut parser = Parser { file, tokens, pos: 0 };
     let mut stmts = Vec::new();
     let mut errors = Vec::new();
 
