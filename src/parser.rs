@@ -83,6 +83,7 @@ pub enum Expr {
 
     Func(Func),
     Call { callee: Box<ExprSpanned>, args: Vec<ExprSpanned> },
+    Assign { target: Box<ExprSpanned>, value: Box<ExprSpanned> },
 
     Unary { op: UnaryOp, rhs: Box<ExprSpanned> },
     Binary { lhs: Box<ExprSpanned>, op: Operator, rhs: Box<ExprSpanned> },
@@ -123,7 +124,13 @@ impl Parser {
     fn is_valid_expr_stmt(&self, e: &Expr) -> bool {
         matches!(e,
             Expr::Call { .. }
-            //| Expr::Assign
+            | Expr::Assign { .. }
+        )
+    }
+
+    fn is_assign_target(&self, e: &Expr) -> bool {
+        matches!(e,
+            Expr::Ident(_)
         )
     }
 
@@ -344,8 +351,32 @@ impl Parser {
         Ok(lhs)
     }
 
+    fn parse_assign(&mut self) -> Result<ExprSpanned, ParseError> {
+        let mut lhs = self.parse_expr_bp(0)?;
+        if self.peek_is(&TokenKind::Assignment) {
+            self.bump();
+
+            let rhs = self.parse_assign()?;
+            if !self.is_assign_target(&lhs.node) {
+                return Err(ParseError {
+                    expected: Expected::Statement,
+                    found: TokenKind::Assignment,
+                    span: lhs.span,
+                });
+            }
+
+            let span = self.join(lhs.span, rhs.span);
+            Ok(Spanned {
+                node: Expr::Assign { target: Box::new(lhs), value: Box::new(rhs) },
+                span
+            })
+        } else {
+            Ok(lhs)
+        }
+    }
+
     fn parse_expr(&mut self) -> Result<ExprSpanned, ParseError> {
-        self.parse_expr_bp(0)
+        self.parse_assign()
     }
 
     // expr ";"?
