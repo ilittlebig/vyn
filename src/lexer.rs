@@ -18,6 +18,7 @@ pub enum LexError {
     DanglingEscape,
     InvalidExponent,
     InvalidMantissa,
+    UnterminatedComment,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -64,6 +65,7 @@ pub enum TokenKind {
     Identifier,
     StringLiteral,
     Comment,
+    MultiLineComment,
     LParen,
     RParen,
     LBrace,
@@ -232,6 +234,17 @@ impl Lexer {
             Ok(())
         } else {
             Err(LexError::UnexpectedEof)
+        }
+    }
+
+    fn bump_or_error_token(&mut self, start: usize) -> Result<(), Token> {
+        if self.peek().is_some() {
+            self.bump();
+            Ok(())
+        } else {
+            let end = self.current_pos;
+            self.lex_error(LexError::UnexpectedEof, start, end);
+            Err(Token { kind: TokenKind::Error, span: Span { start, end }})
         }
     }
 
@@ -419,6 +432,24 @@ impl Lexer {
     /*
      *
      **/
+    fn eat_multi_line_comment(&mut self) -> Token {
+        let start = self.current_pos;
+        while self.peek2().is_some_and(|(b1, b2)| b1 != b'*' || b2 != b'/') {
+            self.bump();
+        }
+
+        if let Err(token) = self.bump_or_error_token(start) {
+            return token;
+        }
+        if let Err(token) = self.bump_or_error_token(start) {
+            return token;
+        }
+        self.token(TokenKind::MultiLineComment, start, self.current_pos)
+    }
+
+    /*
+     *
+     **/
     fn advance_token(&mut self) -> Token {
         let Some(b) = self.peek() else {
             let current_pos = self.current_pos;
@@ -434,6 +465,10 @@ impl Lexer {
             self.consume_while(|b| b == b'/');
             self.consume_while(|b| b != b'\n');
             return self.token(TokenKind::Comment, start, self.current_pos);
+        }
+
+        if matches!(self.peek2(), Some((b'/', b'*'))) {
+            return self.eat_multi_line_comment();
         }
 
         let start = self.current_pos;
@@ -502,6 +537,7 @@ pub fn tokenize(name: String, input: String) -> LexerOutput {
         let kind = token.kind.clone();
         if kind == TokenKind::Whitespace { continue; }
         if kind == TokenKind::Comment { continue; }
+        if kind == TokenKind::MultiLineComment { continue; }
         lexer_output.tokens.push(token);
         if kind == TokenKind::Eof { break; }
     }

@@ -6,7 +6,7 @@
 
 //local a = "hello world"
 
--x;
+local a = -x;
 //+x
 
 local function lol() {
@@ -17,9 +17,15 @@ local function lol() {
 local function b() {
 }
 
-function() {
+function ide() {
 }
 
 f(a, a)
 
 c = a + b
+
+/*
+   this is a multi
+   line
+   comment
+*/
