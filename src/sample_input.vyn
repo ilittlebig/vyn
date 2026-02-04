@@ -17,7 +17,7 @@ local function name() {
 local a = function() {
 }
 
-function() { // allowed as of now
+function() {
 }
 
-f()
+f(a, a)

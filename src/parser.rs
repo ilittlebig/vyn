@@ -15,6 +15,7 @@ enum Expected {
     Operator(Operator),
     Token(TokenKind),
     PrimaryExpression,
+    Statement,
 }
 
 impl Expected {
@@ -88,6 +89,13 @@ impl Parser {
             | TokenKind::Double
             | TokenKind::Identifier
             | TokenKind::Keyword(Keyword::Local)
+        )
+    }
+
+    fn is_valid_expr_stmt(&self, e: &Expr) -> bool {
+        matches!(e,
+            Expr::Call { .. }
+            //| Expr::Assign
         )
     }
 
@@ -233,11 +241,9 @@ impl Parser {
 
                 // no trailing comma allowed
                 if self.consume_if(Expected::Token(TokenKind::Comma)).is_some() {
-                    let expr = self.parse_expr()?;
-                    args.push(expr);
-                } else {
-                    break;
+                    continue;
                 }
+                break;
             }
         }
 
@@ -276,6 +282,14 @@ impl Parser {
     fn parse_expr_stmt(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.parse_expr()?;
         self.consume_if(Expected::Token(TokenKind::Semicolon));
+
+        if !self.is_valid_expr_stmt(&expr) {
+            return Err(ParseError {
+                expected: Expected::Statement,
+                found: self.peek().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                span: Span { start: 0, end: 0 } // TODO: expression spans
+            });
+        }
         Ok(Stmt::ExprStmt(expr))
     }
 
