@@ -130,7 +130,7 @@ impl SourceFile {
         (line, col)
     }
 
-    pub fn line_span(&self, pos: usize) -> &str {
+    pub fn line_span(&self, pos: usize) -> (&str, usize, usize) {
         let (line, _) = self.line_col(pos);
         let start = self.line_starts[line];
 
@@ -148,7 +148,7 @@ impl SourceFile {
         if end > start && bytes[end - 1] == b'\r' {
             end -= 1;
         }
-        &self.src[start..end]
+        (&self.src[start..end], start, end)
     }
 }
 

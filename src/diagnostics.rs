@@ -7,7 +7,7 @@
 
 use std::borrow::Cow;
 use crate::lexer::{ LexError, LexDiagnostic, SourceFile, Span };
-use crate::parser::ParseError;
+use crate::parser::{ ParseError, Expected };
 
 #[derive(Debug)]
 pub enum Severity { Error, Warning }
@@ -25,12 +25,7 @@ impl Diagnostic {
     }
 }
 
-impl From<ParseError> for Diagnostic {
-    fn from(e: ParseError) -> Self {
-        Diagnostic::error("PARSER ERROR", e.span)
-    }
-}
-
+// lexer errors
 impl From<LexDiagnostic> for Diagnostic {
     fn from(e: LexDiagnostic) -> Self {
         match e.kind {
@@ -40,19 +35,36 @@ impl From<LexDiagnostic> for Diagnostic {
     }
 }
 
+// parser errors
+impl From<ParseError> for Diagnostic {
+    fn from(e: ParseError) -> Self {
+        match e.expected {
+            Expected::Statement => Diagnostic::error("expected statement", e.span),
+            _ => Diagnostic::error(format!("unhandled error: {:?}", e.expected), e.span),
+        }
+    }
+}
+
 pub fn print_diagnostic(source_file: &SourceFile, diagnostic: &Diagnostic) {
     let span = diagnostic.span;
     let (line, col) = source_file.line_col(span.start);
-    let line_text = source_file.line_span(span.start);
+    let (line_text, line_start, line_end) = source_file.line_span(span.start);
 
     let severity = match diagnostic.severity {
         Severity::Error => "error",
         Severity::Warning => "warning",
     };
 
-    println!("{}:{}:{}: {}: {}", source_file.name, line, col, severity, diagnostic.message);
-    println!(" {} | {}", line, line_text);
+    println!("{}:{}:{}: {}: {}", source_file.name, line+1, col+1, severity, diagnostic.message);
+    println!(" {} | {}", line+1, line_text);
 
-    let marker = " ".repeat(col) + "^";
-    println!("   | {}", marker);
+    let gutter_length = (line+1).to_string().len();
+    let gutter = "  ".repeat(gutter_length);
+
+    let highlight_start = span.start.max(line_start);
+    let highlight_end = span.end.min(line_end);
+    let width = (highlight_end - highlight_start).max(1);
+
+    let marker = " ".repeat(col) + "^" + &"~".repeat(width - 1);
+    println!("{}| {}", gutter, marker);
 }
