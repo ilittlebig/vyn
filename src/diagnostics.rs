@@ -43,6 +43,7 @@ impl From<ParseError> for Diagnostic {
         match (&e.expected, &e.found) {
             (Expected::Statement, _) => Diagnostic::error(msg, e.span),
             (Expected::Token(TokenKind::RParen), _) => Diagnostic::error("expected `)` to close `(`", e.span),
+            (Expected::Token(TokenKind::RBrace), _) => Diagnostic::error("expected `}` to close `{`", e.span),
             _ => Diagnostic::error(msg, e.span),
         }
     }

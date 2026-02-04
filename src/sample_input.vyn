@@ -9,17 +9,14 @@
 //-x;
 //+x
 
-local function name() {
+local function lol() {
   local a = 1;
   local b = "hello";
+
+local function b() {
 }
 
-local a = function() {
-}
-
-function() {
+function a() {
 }
 
 f(a, a)
-
-function(
