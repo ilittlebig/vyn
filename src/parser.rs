@@ -381,13 +381,14 @@ impl Parser {
 
     // expr ";"?
     fn parse_expr_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let found_kind = self.peek().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof);
         let expr = self.parse_expr()?;
         self.consume_if(Expected::Token(TokenKind::Semicolon));
 
         if !self.is_valid_expr_stmt(&expr.node) {
             return Err(ParseError {
                 expected: Expected::Statement,
-                found: self.peek().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof),
+                found: found_kind,
                 span: expr.span
             });
         }

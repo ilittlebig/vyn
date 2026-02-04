@@ -59,16 +59,16 @@ pub fn print_diagnostic(source_file: &SourceFile, diagnostic: &Diagnostic) {
         Severity::Warning => "warning",
     };
 
-    println!("{}:{}:{}: {}: {}", source_file.name, line+1, col+1, severity, diagnostic.message);
-    println!(" {} | {}", line+1, line_text);
-
-    let gutter_length = (line+1).to_string().len();
-    let gutter = "  ".repeat(gutter_length);
+    let w = (line+1).to_string().len();
 
     let highlight_start = span.start.max(line_start);
     let highlight_end = span.end.min(line_end);
-    let width = (highlight_end - highlight_start).max(1);
+    let start_col = highlight_start - line_start;
 
-    let marker = " ".repeat(col) + "^" + &"~".repeat(width - 1);
-    println!("{}| {}", gutter, marker);
+    let width = (highlight_end - highlight_start).max(1);
+    let marker = " ".repeat(start_col) + "^" + &"~".repeat(width - 1);
+
+    println!("{}:{}:{}: {}: {}", source_file.name, line+1, col+1, severity, diagnostic.message);
+    println!("{:>w$} | {}", line+1, line_text, w = w);
+    println!("{:>w$} | {}", "", marker, w = w);
 }
