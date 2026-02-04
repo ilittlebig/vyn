@@ -4,4 +4,6 @@
 //local a
 //local b;
 
-local a = "hello world""
+//local a = "hello world"
+
+-x*2 // parses as (-x)*2

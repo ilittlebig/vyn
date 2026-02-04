@@ -31,7 +31,8 @@ pub enum Operator {
     Minus,
     Division,
     Multiplication,
-    Modulus
+    Modulus,
+    Not, // !
 }
 
 #[derive(PartialEq, Clone, Debug)]
@@ -210,6 +211,7 @@ impl Lexer {
             b'/' => Some(Operator::Division),
             b'*' => Some(Operator::Multiplication),
             b'%' => Some(Operator::Modulus),
+            b'!' => Some(Operator::Not),
             _ => None,
         }
     }

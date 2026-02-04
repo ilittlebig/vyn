@@ -36,11 +36,18 @@ enum TypeRef {
 }
 
 #[derive(Debug)]
+enum UnaryOp {
+    Neg,
+    Not,
+}
+
+#[derive(Debug)]
 pub enum Expr {
     String(String),
     Int(i64),
     Ident(String),
 
+    Unary { op: UnaryOp, rhs: Box<Expr> },
     Binary { lhs: Box<Expr>, op: Operator, rhs: Box<Expr> }
 }
 
@@ -130,11 +137,20 @@ impl Parser {
         }
     }
 
+    fn prefix_binding_power(&self, token_kind: &TokenKind) -> Option<(UnaryOp, u8)> {
+        match token_kind {
+            TokenKind::Operator(Operator::Minus) => Some((UnaryOp::Neg, 100)),
+            TokenKind::Operator(Operator::Not) => Some((UnaryOp::Not, 100)),
+            _ => None,
+        }
+    }
+
     fn infix_binding_power(&self, token_kind: &TokenKind) -> Option<(u8, u8)> {
         match token_kind {
             TokenKind::Operator(op) => match op {
                 Operator::Plus | Operator::Minus => Some((10, 11)),
                 Operator::Multiplication | Operator::Division | Operator::Modulus => Some((20, 21)),
+                _ => None,
             },
             _ => None,
         }
@@ -146,6 +162,12 @@ impl Parser {
             found: TokenKind::Eof,
             span: Span { start: self.file.len(), end: self.file.len() },
         })?;
+
+        if let Some((unary_op, r_bp)) = self.prefix_binding_power(&token.kind) {
+            self.bump();
+            let rhs = self.parse_expr_bp(r_bp)?;
+            return Ok(Expr::Unary { op: unary_op, rhs: Box::new(rhs) });
+        };
 
         match &token.kind {
             TokenKind::LParen => {
