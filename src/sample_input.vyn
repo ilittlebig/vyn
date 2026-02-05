@@ -1,10 +1,18 @@
+if lol {
+    local a = 0
+} else {
+}
+
+if a == (a+62) {
+}
+
 /*
 local a = true
 local a = false
 */
 
-+3
-local a = nil
+//+3
+//local a = nil
 
 /*
 local a = 1 == 2
@@ -32,8 +40,8 @@ local a = -x;
 //+x
 
 local function lol() {
-  local a = 1;
-  local b = "hello";
+    local a = 1;
+    local b = "hello";
 }
 
 local b = "hellji"
