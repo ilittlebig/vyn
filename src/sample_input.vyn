@@ -1,12 +1,15 @@
 while cond {
+    return
 }
 
 /*
-if lol {
+if (lol) {
     local a = 0
 } else {
 }
+*/
 
+/*
 if a == (a+62) {
 }
 */

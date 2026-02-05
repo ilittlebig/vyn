@@ -98,6 +98,9 @@ pub enum Stmt {
 
     If { cond: ExprSpanned, then_block: Block, else_block: Option<Block> },
     While { cond: ExprSpanned, body: Block },
+    Return(Option<ExprSpanned>),
+    Break,
+    Continue,
 
     Block(Block),
     ExprStmt(ExprSpanned),
@@ -551,6 +554,31 @@ impl Parser {
         Ok(Stmt::While { cond, body })
     }
 
+    fn parse_return_stmt(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(Expected::Keyword(Keyword::Return))?;
+        let stmt = if self.peek_is(&TokenKind::Semicolon) || self.peek_is(&TokenKind::RBrace) {
+            Stmt::Return(None)
+        } else {
+            let expr = self.parse_expr()?;
+            Stmt::Return(Some(expr))
+        };
+
+        self.consume_if(Expected::Token(TokenKind::Semicolon));
+        Ok(stmt)
+    }
+
+    fn parse_break_stmt(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(Expected::Keyword(Keyword::Break))?;
+        self.consume_if(Expected::Token(TokenKind::Semicolon));
+        Ok(Stmt::Break)
+    }
+
+    fn parse_continue_stmt(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(Expected::Keyword(Keyword::Continue))?;
+        self.consume_if(Expected::Token(TokenKind::Semicolon));
+        Ok(Stmt::Continue)
+    }
+
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
         let token = self.peek().unwrap();
         if token.kind == TokenKind::Keyword(Keyword::Local) {
@@ -561,6 +589,12 @@ impl Parser {
             return self.parse_if_stmt();
         } else if token.kind == TokenKind::Keyword(Keyword::While) {
             return self.parse_while_stmt();
+        } else if token.kind == TokenKind::Keyword(Keyword::Return) {
+            return self.parse_return_stmt();
+        } else if token.kind == TokenKind::Keyword(Keyword::Break) {
+            return self.parse_break_stmt();
+        } else if token.kind == TokenKind::Keyword(Keyword::Continue) {
+            return self.parse_continue_stmt();
         } else if token.kind == TokenKind::LBrace {
             return self.parse_block_stmt();
         } else {
