@@ -10,8 +10,7 @@ use std::io::{ self, Write };
 use termcolor::{ Color, ColorChoice, ColorSpec, StandardStream, WriteColor };
 
 use crate::source::SourceFile;
-use crate::frontend::lexer::{ LexError, LexDiagnostic, Span, TokenKind };
-use crate::frontend::parser::{ ParseError, Expected };
+use crate::frontend::lexer::Span;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Severity { Error, Warning, Note }
@@ -24,32 +23,8 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    fn error(message: impl Into<Cow<'static, str>>, span: Span) -> Diagnostic {
+    pub fn error(message: impl Into<Cow<'static, str>>, span: Span) -> Diagnostic {
         Diagnostic { severity: Severity::Error, message: message.into(), span }
-    }
-}
-
-// lexer errors
-impl From<LexDiagnostic> for Diagnostic {
-    fn from(e: LexDiagnostic) -> Self {
-        match e.kind {
-            LexError::UnterminatedString(_) => Diagnostic::error("unterminated string", e.span),
-            _ => Diagnostic::error("blah", e.span),
-        }
-    }
-}
-
-// parser errors
-impl From<ParseError> for Diagnostic {
-    fn from(e: ParseError) -> Self {
-        let msg = format!("expected {}, found {}", e.expected.describe(), e.found.describe());
-
-        match (&e.expected, &e.found) {
-            (Expected::Statement, _) => Diagnostic::error(msg, e.span),
-            (Expected::Token(TokenKind::RParen), _) => Diagnostic::error("expected `)` to close `(`", e.span),
-            (Expected::Token(TokenKind::RBrace), _) => Diagnostic::error("expected `}` to close `{`", e.span),
-            _ => Diagnostic::error(msg, e.span),
-        }
     }
 }
 
