@@ -14,10 +14,9 @@ local function lol() {
   local b = "hello";
 }
 
-local function b() {
-}
+local b = "hellji" {}
 
-function() {
+function a() {
 }
 
 f(a, a)

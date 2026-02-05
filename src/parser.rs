@@ -352,7 +352,7 @@ impl Parser {
     }
 
     fn parse_assign(&mut self) -> Result<ExprSpanned, ParseError> {
-        let mut lhs = self.parse_expr_bp(0)?;
+        let lhs = self.parse_expr_bp(0)?;
         if self.peek_is(&TokenKind::Assignment) {
             self.bump();
 
@@ -442,7 +442,24 @@ impl Parser {
                 None
             };
 
-            self.consume_if(Expected::Token(TokenKind::Semicolon));
+            let last_stmt_end = self.tokens[self.pos.saturating_sub(1)].span.end;
+            if self.consume_if(Expected::Token(TokenKind::Semicolon)).is_some() {
+                // ok
+            } else if matches!(self.peek().map(|t| &t.kind), Some(TokenKind::Eof) | Some(TokenKind::RBrace)) {
+                // ok
+            } else {
+                let next = self.peek().unwrap();
+                let (line1, _) = self.file.line_col(last_stmt_end.saturating_sub(1));
+                let (line2, _) = self.file.line_col(next.span.start);
+
+                if line1 == line2 {
+                    return Err(ParseError {
+                        expected: Expected::Token(TokenKind::Semicolon),
+                        found: next.kind.clone(),
+                        span: next.span,
+                    });
+                }
+            }
             Ok(Stmt::Decl { name, ty, init })
         }
     }
