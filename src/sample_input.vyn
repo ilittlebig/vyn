@@ -1,3 +1,7 @@
+while cond {
+}
+
+/*
 if lol {
     local a = 0
 } else {
@@ -5,6 +9,7 @@ if lol {
 
 if a == (a+62) {
 }
+*/
 
 /*
 local a = true

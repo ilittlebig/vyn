@@ -95,7 +95,10 @@ pub enum Expr {
 pub enum Stmt {
     Decl { name: String, ty: Option<TypeRef>, init: Option<ExprSpanned> },
     FuncDecl { name: String, init: Func },
+
     If { cond: ExprSpanned, then_block: Block, else_block: Option<Block> },
+    While { cond: ExprSpanned, body: Block },
+
     Block(Block),
     ExprStmt(ExprSpanned),
 }
@@ -541,6 +544,13 @@ impl Parser {
         Ok(Stmt::If { cond, then_block, else_block })
     }
 
+    fn parse_while_stmt(&mut self) -> Result<Stmt, ParseError> {
+        self.expect(Expected::Keyword(Keyword::While))?;
+        let cond = self.parse_expr()?;
+        let body = self.parse_block()?;
+        Ok(Stmt::While { cond, body })
+    }
+
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
         let token = self.peek().unwrap();
         if token.kind == TokenKind::Keyword(Keyword::Local) {
@@ -549,6 +559,8 @@ impl Parser {
             return self.parse_func_decl_stmt();
         } else if token.kind == TokenKind::Keyword(Keyword::If) {
             return self.parse_if_stmt();
+        } else if token.kind == TokenKind::Keyword(Keyword::While) {
+            return self.parse_while_stmt();
         } else if token.kind == TokenKind::LBrace {
             return self.parse_block_stmt();
         } else {
