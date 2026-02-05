@@ -80,6 +80,7 @@ pub enum Expr {
     String(String),
     Int(i64),
     Ident(String),
+    Bool(bool),
 
     Func(Func),
     Call { callee: Box<ExprSpanned>, args: Vec<ExprSpanned> },
@@ -277,6 +278,14 @@ impl Parser {
                     node: Expr::Func(Func { body: Box::new(body) }),
                     span
                 });
+            },
+            TokenKind::Keyword(Keyword::True) => {
+                self.expect(Expected::Keyword(Keyword::True))?;
+                return Ok(Spanned { node: Expr::Bool(true), span });
+            },
+            TokenKind::Keyword(Keyword::False) => {
+                self.expect(Expected::Keyword(Keyword::False))?;
+                return Ok(Spanned { node: Expr::Bool(false), span });
             },
             TokenKind::LParen => {
                 let lparen = self.expect(Expected::Token(TokenKind::LParen))?;

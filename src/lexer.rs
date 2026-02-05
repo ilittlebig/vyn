@@ -25,6 +25,8 @@ pub enum LexError {
 pub enum Keyword {
     Local,
     Function,
+    True,
+    False,
 }
 
 impl Keyword {
@@ -32,6 +34,8 @@ impl Keyword {
         match self {
             Keyword::Local => "local",
             Keyword::Function => "function",
+            Keyword::True => "true",
+            Keyword::False => "false",
         }
     }
 }
@@ -283,6 +287,8 @@ impl Lexer {
         match lexeme {
             "local" => Some(Keyword::Local),
             "function" => Some(Keyword::Function),
+            "true" => Some(Keyword::True),
+            "false" => Some(Keyword::False),
             _ => None,
         }
     }

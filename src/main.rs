@@ -12,7 +12,8 @@ fn main() {
 
     let lexer_output = lexer::tokenize(filename.to_string(), contents);
     let (stmts, parse_errors) = parser::parse_program(lexer_output.file.clone(), lexer_output.tokens);
-    //println!("stmts: {:?}", stmts);
+
+    println!("stmts: {:?}", stmts);
 
     for e in parse_errors {
         let diagnostic: Diagnostic = e.into();
