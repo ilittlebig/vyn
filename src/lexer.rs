@@ -27,6 +27,7 @@ pub enum Keyword {
     Function,
     True,
     False,
+    Nil,
 }
 
 impl Keyword {
@@ -36,6 +37,7 @@ impl Keyword {
             Keyword::Function => "function",
             Keyword::True => "true",
             Keyword::False => "false",
+            Keyword::Nil => "nil",
         }
     }
 }
@@ -289,6 +291,7 @@ impl Lexer {
             "function" => Some(Keyword::Function),
             "true" => Some(Keyword::True),
             "false" => Some(Keyword::False),
+            "nil" => Some(Keyword::Nil),
             _ => None,
         }
     }

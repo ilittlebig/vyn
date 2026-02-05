@@ -1,5 +1,9 @@
+/*
 local a = true
 local a = false
+*/
+
+local a = nil
 
 /*
 local a = 1 == 2
