@@ -16,11 +16,11 @@ fn main() {
 
     for e in parse_errors {
         let diagnostic: Diagnostic = e.into();
-        diagnostics::print_diagnostic(&lexer_output.file, &diagnostic);
+        let _ = diagnostics::print_diagnostic(&lexer_output.file, &diagnostic);
     }
 
     for e in lexer_output.errors {
         let diagnostic: Diagnostic = e.into();
-        diagnostics::print_diagnostic(&lexer_output.file, &diagnostic);
+        let _ = diagnostics::print_diagnostic(&lexer_output.file, &diagnostic);
     }
 }

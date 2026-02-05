@@ -17,7 +17,7 @@ local function lol() {
 local function b() {
 }
 
-function ide() {
+function() {
 }
 
 f(a, a)
