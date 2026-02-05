@@ -2,6 +2,9 @@ while cond {
     return
 }
 
+// local a = "hello wolrd";
+local a = "hello wolrd";
+
 /*
 if (lol) {
     local a = 0

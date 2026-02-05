@@ -9,21 +9,21 @@ syn keyword vynKeyword local function if else while return break continue true f
 syn keyword vynType int string bool double
 
 " Numbers
-syn match vynNumber /\<\d\+\(\.\d\+\)\?\>/
+syn match vynNumber    /\<\d\+\(\.\d\+\)\?\>/                       containedin=ALLBUT,vynLineComment,vynBlockComment
 
 " Strings
-syn region vynString start=/"/ skip=/\\"/ end=/"/
-syn region vynString start=/'/ skip=/\\'/ end=/'/
+syn region vynString   start=/"/ skip=/\\"/ end=/"/                 containedin=ALLBUT,vynLineComment,vynBlockComment
+syn region vynString   start=/'/ skip=/\\'/ end=/'/                 containedin=ALLBUT,vynLineComment,vynBlockComment
 
 " Comments
-syn match  vynLineComment  /\/\/.*/
-syn region vynBlockComment start=/\/\*/ end=/\*\//
+syn match  vynLineComment  +//.*$+          contains=@Spell containedin=ALL
+syn region vynBlockComment start=+/\*+ end=+\*/+ keepend contains=@Spell containedin=ALL
 
 " Operators
-syn match vynOperator /==\|!=\|<=\|>=\|&&\|||\|[+\-*/%<>=!]/
+syn match vynOperator  /==\|!=\|<=\|>=\|&&\|\|\|[+\-*/%<>=!]/ containedin=ALLBUT,vynLineComment,vynBlockComment
 
 " Braces/parens punctuation
-syn match vynDelimiter /[(){};,:\[\]]/
+syn match vynDelimiter /[(){};,:\[\]]/                              containedin=ALLBUT,vynLineComment,vynBlockComment
 
 hi def link vynKeyword      Keyword
 hi def link vynType         Type

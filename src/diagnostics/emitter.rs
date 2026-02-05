@@ -9,8 +9,9 @@ use std::borrow::Cow;
 use std::io::{ self, Write };
 use termcolor::{ Color, ColorChoice, ColorSpec, StandardStream, WriteColor };
 
-use crate::lexer::{ LexError, LexDiagnostic, SourceFile, Span, TokenKind };
-use crate::parser::{ ParseError, Expected };
+use crate::source::SourceFile;
+use crate::frontend::lexer::{ LexError, LexDiagnostic, Span, TokenKind };
+use crate::frontend::parser::{ ParseError, Expected };
 
 #[derive(Debug, Clone, Copy)]
 pub enum Severity { Error, Warning, Note }

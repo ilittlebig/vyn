@@ -5,7 +5,8 @@
  * Created: 2026-02-03
  **/
 
-use crate::lexer::{Token, TokenKind, Keyword, Operator, Span, SourceFile};
+use crate::source::SourceFile;
+use crate::frontend::lexer::{ Token, TokenKind, Keyword, Operator, Span };
 
 #[derive(Debug, Clone)]
 pub enum Expected {
