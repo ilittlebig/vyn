@@ -38,23 +38,45 @@ impl Keyword {
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum Operator {
-    Plus,
-    Minus,
-    Division,
-    Multiplication,
-    Modulus,
-    Not, // !
+    // arithmetic
+    Plus, Minus, Division, Multiplication, Modulus,
+
+    // unary/boolean
+    Not,
+    And,
+    Or,
+
+    // comparisons
+    NotEqual,
+    Equal,
+    LessThan,
+    LessThanEqual,
+    GreaterThan,
+    GreaterThanEqual,
 }
 
 impl Operator {
     pub fn describe(&self) -> &'static str {
         match self {
+            // arithmetic
             Operator::Plus => "+",
             Operator::Minus => "-",
             Operator::Division => "/",
             Operator::Multiplication => "*",
             Operator::Modulus => "%",
+
+            // unary/boolean
             Operator::Not => "!",
+            Operator::And => "&&",
+            Operator::Or => "||",
+
+            // comparisons
+            Operator::NotEqual => "!=",
+            Operator::Equal => "==",
+            Operator::LessThan => "<",
+            Operator::LessThanEqual => "<=",
+            Operator::GreaterThan => ">",
+            Operator::GreaterThanEqual => ">=",
         }
     }
 }
@@ -265,16 +287,55 @@ impl Lexer {
         }
     }
 
-    fn lookup_operator(&self, b: u8) -> Option<Operator> {
-        match b {
+    fn scan_operator(&mut self) -> Option<Operator> {
+        if let Some((b1, b2)) = self.peek2() {
+            let op2 = match (b1, b2) {
+                // unary/boolean
+                (b'&', b'&') => Some(Operator::And),
+                (b'|', b'|') => Some(Operator::Or),
+
+                // comparisons
+                (b'!', b'=') => Some(Operator::NotEqual),
+                (b'=', b'=') => Some(Operator::Equal),
+                (b'<', b'=') => Some(Operator::LessThanEqual),
+                (b'>', b'=') => Some(Operator::GreaterThanEqual),
+
+                //
+                _ => None,
+            };
+
+            if let Some(op) = op2 {
+                self.bump();
+                self.bump();
+                return Some(op);
+            }
+        }
+
+        let b = self.peek().unwrap();
+        let op1 = match b {
+            // arithmetic
             b'+' => Some(Operator::Plus),
             b'-' => Some(Operator::Minus),
             b'/' => Some(Operator::Division),
             b'*' => Some(Operator::Multiplication),
             b'%' => Some(Operator::Modulus),
+
+            // unary/boolean
             b'!' => Some(Operator::Not),
+
+            // comparisons
+            b'<' => Some(Operator::LessThan),
+            b'>' => Some(Operator::GreaterThan),
+
+            //
             _ => None,
+        };
+
+        if let Some(op) = op1 {
+            self.bump();
+            return Some(op);
         }
+        None
     }
 
     fn token(&self, kind: TokenKind, start: usize, end: usize) -> Token {
@@ -471,14 +532,19 @@ impl Lexer {
             return self.eat_multi_line_comment();
         }
 
+        // has to be checked before operators unless '=' should be an operator
         let start = self.current_pos;
-        match self.peek().and_then(|b| self.lookup_operator(b)) {
-            Some(operator) => {
+        if b == b'=' {
+            if matches!(self.peek2(), Some((b'=', b'='))) {
+                // scan operator handles '=='
+            } else {
                 self.bump();
-                let end = self.current_pos;
-                return self.token(TokenKind::Operator(operator), start, end);
-            },
-            None => {},
+                return self.token(TokenKind::Assignment, start, self.current_pos);
+            }
+        }
+
+        if let Some(operator) = self.scan_operator() {
+            return self.token(TokenKind::Operator(operator), start, self.current_pos);
         }
 
         if self.is_identifier_start(b) {
@@ -496,9 +562,6 @@ impl Lexer {
         } else if b == b',' {
             self.bump();
             return self.token(TokenKind::Comma, start, self.current_pos);
-        } else if b == b'=' {
-            self.bump();
-            return self.token(TokenKind::Assignment, start, self.current_pos);
         } else if b == b'(' {
             self.bump();
             return self.token(TokenKind::LParen, start, self.current_pos);

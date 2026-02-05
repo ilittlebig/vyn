@@ -219,8 +219,24 @@ impl Parser {
     fn infix_binding_power(&self, token_kind: &TokenKind) -> Option<(u8, u8)> {
         match token_kind {
             TokenKind::Operator(op) => match op {
+                // arithmetic
                 Operator::Plus | Operator::Minus => Some((10, 11)),
                 Operator::Multiplication | Operator::Division | Operator::Modulus => Some((20, 21)),
+
+                // boolean
+                Operator::And => Some((4, 5)),
+                Operator::Or => Some((2, 3)),
+
+                // comparisons
+                Operator::LessThan
+                | Operator::LessThanEqual
+                | Operator::GreaterThan
+                | Operator::GreaterThanEqual => Some((8, 9)),
+
+                // equality
+                Operator::Equal | Operator::NotEqual => Some((6, 7)),
+
+                //
                 _ => None,
             },
             _ => None,
