@@ -5,8 +5,9 @@
  * Created: 2026-02-03
  **/
 
+use crate::diagnostics::Span;
 use crate::source::SourceFile;
-use crate::frontend::lexer::{ Token, TokenKind, Keyword, Operator, Span };
+use crate::frontend::lexer::{ Token, TokenKind, Keyword, Operator };
 
 #[derive(Debug, Clone)]
 pub enum Expected {
@@ -152,10 +153,6 @@ impl Parser {
         matches!(self.peek().map(|t| &t.kind), Some(k) if k == kind)
     }
 
-    fn join(&self, a: Span, b: Span) -> Span {
-        Span { start: a.start, end: b.end }
-    }
-
     fn bump(&mut self) -> Token {
         let i = self.pos;
         self.pos += 1;
@@ -181,7 +178,7 @@ impl Parser {
         let token = self.peek().ok_or(ParseError {
             expected: expected.clone(),
             found: TokenKind::Eof,
-            span: Span { start: self.file.len(), end: self.file.len() },
+            span: Span::new(self.file.len(), self.file.len()),
         })?;
 
         if !expected.matches(&token.kind) {
@@ -258,7 +255,7 @@ impl Parser {
             let token = self.peek().ok_or(ParseError {
                 expected: Expected::PrimaryExpression,
                 found: TokenKind::Eof,
-                span: Span { start: self.file.len(), end: self.file.len() },
+                span: Span::new(self.file.len(), self.file.len()),
             })?;
             (token.kind.clone(), token.span)
         };
@@ -266,7 +263,7 @@ impl Parser {
         if let Some((unary_op, r_bp)) = self.prefix_binding_power(&kind) {
             self.bump();
             let rhs = self.parse_expr_bp(r_bp)?;
-            let span = self.join(span, rhs.span);
+            let span = span.join(rhs.span);
 
             return Ok(Spanned {
                 node: Expr::Unary { op: unary_op, rhs: Box::new(rhs) },
@@ -282,7 +279,7 @@ impl Parser {
                 self.expect_closing(TokenKind::RParen, lparen.span)?;
 
                 let body = self.parse_block()?;
-                let span = self.join(fn_token.span, body.span);
+                let span = fn_token.span.join(body.span);
                 return Ok(Spanned {
                     node: Expr::Func(Func { body: Box::new(body) }),
                     span
@@ -307,7 +304,7 @@ impl Parser {
 
                 return Ok(Spanned {
                     node: inner.node,
-                    span: self.join(lparen.span, rparen.span)
+                    span: lparen.span.join(rparen.span)
                 });
             },
             TokenKind::StringLiteral => {
@@ -346,7 +343,11 @@ impl Parser {
                     // no trailing comma allowed
                     if self.peek_is(&TokenKind::RParen) {
                         let token = self.peek().unwrap();
-                        return Err(ParseError { expected: Expected::PrimaryExpression, found: TokenKind::RParen, span: token.span });
+                        return Err(ParseError {
+                            expected: Expected::PrimaryExpression,
+                            found: TokenKind::RParen,
+                            span: token.span
+                        });
                     }
                     continue;
                 }
@@ -355,7 +356,7 @@ impl Parser {
         }
 
         let rparen = self.expect_closing(TokenKind::RParen, lparen.span)?;
-        let span = self.join(callee.span, rparen.span);
+        let span = callee.span.join(rparen.span);
         Ok(Spanned {
             node: Expr::Call { callee: Box::new(callee), args },
             span
@@ -380,7 +381,7 @@ impl Parser {
             };
 
             let rhs = self.parse_expr_bp(r_bp)?;
-            let span = self.join(lhs.span, rhs.span);
+            let span = lhs.span.join(rhs.span);
             lhs = Spanned {
                 node: Expr::Binary { lhs: Box::new(lhs), op, rhs: Box::new(rhs) },
                 span
@@ -403,7 +404,7 @@ impl Parser {
                 });
             }
 
-            let span = self.join(lhs.span, rhs.span);
+            let span = lhs.span.join(rhs.span);
             Ok(Spanned {
                 node: Expr::Assign { target: Box::new(lhs), value: Box::new(rhs) },
                 span
@@ -458,7 +459,7 @@ impl Parser {
             self.expect_closing(TokenKind::RParen, lparen.span)?;
 
             let body = self.parse_block()?;
-            let span = self.join(fn_token.span, body.span);
+            let span = fn_token.span.join(body.span);
 
             let expr = Spanned {
                 node: Expr::Func(Func { body: Box::new(body) }),
@@ -526,7 +527,7 @@ impl Parser {
         let rbrace = self.expect_closing(TokenKind::RBrace, lbrace.span)?;
         Ok(Block {
             stmts,
-            span: self.join(lbrace.span, rbrace.span)
+            span: lbrace.span.join(rbrace.span)
         })
     }
 

@@ -9,8 +9,8 @@ use std::borrow::Cow;
 use std::io::{ self, Write };
 use termcolor::{ Color, ColorChoice, ColorSpec, StandardStream, WriteColor };
 
+use crate::diagnostics::Span;
 use crate::source::SourceFile;
-use crate::frontend::lexer::Span;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Severity { Error, Warning, Note }

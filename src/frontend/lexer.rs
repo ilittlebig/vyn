@@ -5,6 +5,7 @@
  * Created: 2026-02-01
  **/
 
+use crate::diagnostics::Span;
 use crate::source::SourceFile;
 
 #[derive(PartialEq)]
@@ -147,9 +148,6 @@ impl TokenKind {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct Span { pub start: usize, pub end: usize }
-
 #[derive(Clone, Debug)]
 pub struct Token {
     pub kind: TokenKind,
@@ -220,7 +218,7 @@ impl Lexer {
         } else {
             let end = self.current_pos;
             self.lex_error(LexError::UnexpectedEof, start, end);
-            Err(Token { kind: TokenKind::Error, span: Span { start, end }})
+            Err(Token { kind: TokenKind::Error, span: Span::new(start, end) })
         }
     }
 
@@ -302,12 +300,12 @@ impl Lexer {
     }
 
     fn token(&self, kind: TokenKind, start: usize, end: usize) -> Token {
-        let line_span = Span { start, end };
+        let line_span = Span::new(start, end);
         Token { kind, span: line_span }
     }
 
     fn lex_error(&mut self, kind: LexError, start: usize, end: usize) -> Token {
-        self.errors.push(LexDiagnostic { kind, span: Span { start, end }});
+        self.errors.push(LexDiagnostic { kind, span: Span::new(start, end) });
         self.token(TokenKind::Error, start, end)
     }
 
