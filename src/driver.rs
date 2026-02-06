@@ -7,7 +7,7 @@
 
 use crate::frontend::lexer;
 use crate::frontend::parser;
-use crate::diagnostics::{ print_diagnostic, Diagnostic };
+use crate::diagnostics::{ Emitter, Diagnostic };
 
 pub fn drive(filename: &str, input: String) {
     let lexer_output = lexer::tokenize(filename.to_string(), input);
@@ -15,13 +15,14 @@ pub fn drive(filename: &str, input: String) {
 
     println!("stmts: {:?}", stmts);
 
+    let mut emitter = Emitter::stderr();
     for e in parse_errors {
         let diagnostic: Diagnostic = e.into();
-        let _ = print_diagnostic(&lexer_output.file, &diagnostic);
+        emitter.emit(&lexer_output.file, &diagnostic);
     }
 
     for e in lexer_output.errors {
         let diagnostic: Diagnostic = e.into();
-        let _ = print_diagnostic(&lexer_output.file, &diagnostic);
+        emitter.emit(&lexer_output.file, &diagnostic);
     }
 }

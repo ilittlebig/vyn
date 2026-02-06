@@ -28,6 +28,67 @@ impl Diagnostic {
     }
 }
 
+pub struct Emitter {
+    out: StandardStream,
+}
+
+impl Emitter {
+    pub fn new(color_choice: ColorChoice) -> Self {
+        Self { out: StandardStream::stderr(color_choice) }
+    }
+
+    pub fn stderr() -> Self {
+        Self { out: StandardStream::stderr(ColorChoice::Auto) }
+    }
+
+    pub fn emit(&mut self, source_file: &SourceFile, diagnostic: &Diagnostic) -> io::Result<()> {
+        let out = &mut self.out;
+
+        let span = diagnostic.span;
+        let (line, col) = source_file.line_col(span.start);
+        let (line_text, line_start, line_end) = source_file.line_span(span.start);
+
+        let w = (line + 1).to_string().len();
+        write!(out, "{}:{}:{}: ", source_file.name, line + 1, col + 1)?;
+
+        out.set_color(&severity_spec(diagnostic.severity))?;
+        write!(out, "{}", match diagnostic.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+            Severity::Note => "note",
+        })?;
+
+        out.reset()?;
+        writeln!(out, ": {}", diagnostic.message)?;
+
+        out.set_color(&gutter_spec())?;
+        write!(out, "{:>w$} |", line + 1, w = w)?;
+        out.reset()?;
+
+        writeln!(out, " {}", line_text)?;
+
+        let highlight_start = span.start.max(line_start);
+        let highlight_end = span.end.min(line_end);
+        let width = (highlight_end.saturating_sub(highlight_start)).max(1);
+
+        let marker = format!(
+            "{}^{}",
+            " ".repeat(col),
+            "~".repeat(width.saturating_sub(1))
+        );
+
+        out.set_color(&gutter_spec())?;
+        write!(out, "{:>w$} | ", "", w = w)?;
+        out.reset()?;
+
+        out.set_color(&severity_spec(diagnostic.severity))?;
+        writeln!(out, "{}", marker)?;
+        out.reset()?;
+
+        Ok(())
+    }
+}
+
 fn severity_spec(severity: Severity) -> ColorSpec {
     let mut spec = ColorSpec::new();
     spec.set_bold(true);
@@ -44,55 +105,4 @@ fn gutter_spec() -> ColorSpec {
     spec.set_bold(true);
     spec.set_fg(Some(Color::Rgb(0, 0, 245)));
     spec
-}
-
-pub fn print_diagnostic(source_file: &SourceFile, diagnostic: &Diagnostic) -> io::Result<()> {
-    let mut out = StandardStream::stderr(ColorChoice::Auto);
-
-    let span = diagnostic.span;
-    let (line, col) = source_file.line_col(span.start);
-    let (line_text, line_start, line_end) = source_file.line_span(span.start);
-
-    let w = (line + 1).to_string().len();
-    write!(&mut out, "{}:{}:{}: ", source_file.name, line + 1, col + 1)?;
-
-    out.set_color(&severity_spec(diagnostic.severity))?;
-    write!(
-        &mut out,
-        "{}",
-        match diagnostic.severity {
-            Severity::Error => "error",
-            Severity::Warning => "warning",
-            Severity::Note => "note",
-        }
-    )?;
-
-    out.reset()?;
-    writeln!(&mut out, ": {}", diagnostic.message)?;
-
-    out.set_color(&gutter_spec())?;
-    write!(&mut out, "{:>w$} |", line + 1, w = w)?;
-    out.reset()?;
-
-    writeln!(&mut out, " {}", line_text)?;
-
-    let highlight_start = span.start.max(line_start);
-    let highlight_end = span.end.min(line_end);
-    let width = (highlight_end.saturating_sub(highlight_start)).max(1);
-
-    let marker = format!(
-        "{}^{}",
-        " ".repeat(col),
-        "~".repeat(width.saturating_sub(1))
-    );
-
-    out.set_color(&gutter_spec())?;
-    write!(&mut out, "{:>w$} | ", "", w = w)?;
-    out.reset()?;
-
-    out.set_color(&severity_spec(diagnostic.severity))?;
-    writeln!(&mut out, "{}", marker)?;
-    out.reset()?;
-
-    Ok(())
 }
