@@ -6,7 +6,7 @@
  **/
 
 use crate::diagnostics::{ Span, Spanned, Diagnostic };
-use crate::passes::{ PassContext, Symbol, Def, DefId, DefKind, Scope };
+use crate::passes::{ PassContext, Symbol, Def, DefId, DefKind };
 use crate::frontend::parser::{ Stmt, Expr, Block, UnaryOp };
 use crate::frontend::lexer::Operator;
 
@@ -50,6 +50,8 @@ struct HirBlock {
 enum HirStmt {
     Decl { name: Symbol, init: Option<HirExpr> },
     While { cond: HirExpr, body: HirBlock },
+    If { cond: HirExpr, then_block: HirBlock, else_block: Option<HirBlock> },
+    Return(Option<HirExpr>),
 }
 
 fn lookup_var(ctx: &PassContext, symbol: Symbol) -> Option<DefId> {
@@ -84,6 +86,7 @@ fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span) {
 fn use_name(ctx: &mut PassContext, name: &String, span: Span) -> HirExpr {
     let symbol = ctx.interner.intern(name);
     let Some(def_id) = lookup_var(ctx, symbol) else {
+        ctx.diags.push(Diagnostic::error("use of undeclared variable", span));
         return HirExpr { kind: HirExprKind::Error, span }
     };
 
@@ -195,6 +198,16 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
             let block = traverse_block(ctx, body);
             HirStmt::While { cond: expr, body: block }
         },
+        Stmt::If { cond, then_block, else_block } => {
+            let expr = traverse_expr(ctx, cond);
+            let then_block = traverse_block(ctx, then_block);
+            let else_block = else_block.as_ref().map(|b| traverse_block(ctx, b));
+            HirStmt::If { cond: expr, then_block, else_block }
+        },
+        Stmt::Return(expr) => {
+            let expr = expr.as_ref().map(|e| traverse_expr(ctx, e));
+            HirStmt::Return(expr)
+        }
         _ => { todo!(); },
     }
 }
