@@ -10,8 +10,12 @@ use crate::frontend::parser::Stmt;
 use crate::passes::interner::Interner;
 use crate::diagnostics::{ Span, Diagnostic };
 
+mod hir;
+mod types;
 mod interner;
+
 mod name_resolve;
+mod type_checking;
 
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub struct Symbol(usize);
@@ -46,6 +50,7 @@ pub struct PassContext {
     pub scopes: Vec<Scope>,
     pub diags: Vec<Diagnostic>,
     pub current_scope: ScopeId,
+    // add types here DefId -> Type
 }
 
 impl PassContext {
@@ -78,8 +83,8 @@ pub fn run_passes(ast: &Vec<Stmt>) -> Vec<Diagnostic> {
     // global scope
     ctx.scopes.push(Scope { parent: None, bindings: HashMap::new() });
 
-    name_resolve::run(&mut ctx, ast);
-    //
+    let hir = name_resolve::run(&mut ctx, ast);
+    type_checking::run(&mut ctx, &hir);
     //
 
     ctx.diags
