@@ -5,7 +5,7 @@
  * Created: 2026-02-06
  **/
 
-use crate::diagnostics::{ Span, Spanned };
+use crate::diagnostics::{ Span, Spanned, Diagnostic };
 use crate::passes::{ PassContext, Symbol, Def, DefId, DefKind, Scope };
 use crate::frontend::parser::{ Stmt, Expr, Block, UnaryOp };
 use crate::frontend::lexer::Operator;
@@ -63,8 +63,12 @@ fn lookup_var(ctx: &PassContext, symbol: Symbol) -> Option<DefId> {
     }
 }
 
-// TODO: do we emit redefinition diagnostics here too?
 fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span) {
+    if lookup_var(ctx, symbol).is_some() {
+        ctx.diags.push(Diagnostic::error("redefinition of variable", span));
+        return;
+    }
+
     let def_id = DefId(ctx.defs.len());
     ctx.scope_mut(ctx.current_scope)
         .bindings
@@ -77,18 +81,15 @@ fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span) {
     });
 }
 
-fn use_name(ctx: &mut PassContext, name: &String) -> HirExpr {
+fn use_name(ctx: &mut PassContext, name: &String, span: Span) -> HirExpr {
     let symbol = ctx.interner.intern(name);
     let Some(def_id) = lookup_var(ctx, symbol) else {
-        return HirExpr {
-            kind: HirExprKind::Error,
-            span: Span { start: 0, end: 0 },
-        }
+        return HirExpr { kind: HirExprKind::Error, span }
     };
 
     HirExpr {
         kind: HirExprKind::VarRef { def: def_id },
-        span: Span { start: 0, end: 0 },
+        span
     }
 }
 
@@ -97,36 +98,34 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
     match node {
         Expr::String(s) => HirExpr {
             kind: HirExprKind::String(s.to_string()),
-            span: Span { start: 0, end: 0 },
+            span: expr.span,
         },
         Expr::Int(i) => HirExpr {
             kind: HirExprKind::Int(*i),
-            span: Span { start: 0, end: 0 },
+            span: expr.span,
         },
-        Expr::Ident(name) => use_name(ctx, name),
+        Expr::Ident(name) => use_name(ctx, name, expr.span),
         Expr::Bool(b) => HirExpr {
             kind: HirExprKind::Bool(*b),
-            span: Span { start: 0, end: 0 },
+            span: expr.span,
         },
         Expr::Nil => HirExpr {
             kind: HirExprKind::Nil,
-            span: Span { start: 0, end: 0 },
+            span: expr.span,
         },
 
         Expr::Func(f) => {
             let block = traverse_block(ctx, &f.body);
-            let span = block.span.clone();
-
             HirExpr {
                 kind: HirExprKind::Func(Func { body: Box::new(block) }),
-                span
+                span: expr.span
             }
         },
 
         Expr::Call { callee, args, .. } => {
             let callee_expr = traverse_expr(ctx, callee);
-
             let mut new_args = Vec::new();
+
             for arg in args {
                 let expr = traverse_expr(ctx, arg);
                 new_args.push(expr);
@@ -137,7 +136,7 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
                     callee: Box::new(callee_expr),
                     args: new_args
                 },
-                span: Span { start: 0, end: 0 },
+                span: expr.span,
             }
         },
 
@@ -150,7 +149,7 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
                     target: Box::new(target_expr),
                     value: Box::new(value_expr),
                 },
-                span: Span { start: 0, end: 0 },
+                span: expr.span,
             }
         },
 
@@ -161,7 +160,7 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
                     op: op.clone(),
                     rhs: Box::new(rhs_expr),
                 },
-                span: Span { start: 0, end: 0 },
+                span: expr.span,
             }
         },
 
@@ -174,7 +173,7 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
                     op: op.clone(),
                     rhs: Box::new(rhs_expr),
                 },
-                span: Span { start: 0, end: 0 },
+                span: expr.span,
             }
         },
     }

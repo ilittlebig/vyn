@@ -16,8 +16,6 @@ pub fn drive(filename: &str, input: String) {
 
     //println!("stmts: {:?}", stmts);
 
-    passes::run_passes(&stmts);
-
     let mut emitter = Emitter::stderr();
     for e in parse_errors {
         let diagnostic: Diagnostic = e.into();
@@ -25,6 +23,12 @@ pub fn drive(filename: &str, input: String) {
     }
 
     for e in lexer_output.errors {
+        let diagnostic: Diagnostic = e.into();
+        emitter.emit(&lexer_output.file, &diagnostic);
+    }
+
+    let pass_diagnostics = passes::run_passes(&stmts);
+    for e in pass_diagnostics {
         let diagnostic: Diagnostic = e.into();
         emitter.emit(&lexer_output.file, &diagnostic);
     }

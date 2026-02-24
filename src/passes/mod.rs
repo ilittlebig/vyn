@@ -66,7 +66,7 @@ impl PassContext {
     }
 }
 
-pub fn run_passes(ast: &Vec<Stmt>) {
+pub fn run_passes(ast: &Vec<Stmt>) -> Vec<Diagnostic> {
     let mut ctx = PassContext {
         interner: Interner::new(),
         defs: Vec::new(),
@@ -79,4 +79,8 @@ pub fn run_passes(ast: &Vec<Stmt>) {
     ctx.scopes.push(Scope { parent: None, bindings: HashMap::new() });
 
     name_resolve::run(&mut ctx, ast);
+    //
+    //
+
+    ctx.diags
 }
