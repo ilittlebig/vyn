@@ -119,6 +119,7 @@ pub enum TokenKind {
     Semicolon,
     Colon,
     Comma,
+    Dot,
     Integer,
     Double,
     Error,
@@ -140,6 +141,7 @@ impl TokenKind {
             TokenKind::Semicolon => "`;`".into(),
             TokenKind::Colon => "`:`".into(),
             TokenKind::Comma => "`,`".into(),
+            TokenKind::Dot => "`.`".into(),
             TokenKind::Integer => "integer".into(),
             TokenKind::Double => "double".into(),
             TokenKind::Eof => "end of file".into(),
@@ -523,6 +525,9 @@ impl Lexer {
         } else if b == b',' {
             self.bump();
             return self.token(TokenKind::Comma, start, self.current_pos);
+        } else if b == b'.' {
+            self.bump();
+            return self.token(TokenKind::Dot, start, self.current_pos);
         } else if b == b'(' {
             self.bump();
             return self.token(TokenKind::LParen, start, self.current_pos);

@@ -2,10 +2,9 @@
 //local a = 5;
 //local b = 0;
 
-{ local x = 1; { local x = 2; } }
 local a = 0;
-local a = 1;
-local x = x + 1;
+local b = a().c
+local c = 0;
 
 /*
 local a = 0

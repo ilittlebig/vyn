@@ -31,8 +31,8 @@ impl Span {
 
     pub fn join(self, other: Span) -> Span {
         Span {
-            start: other.start,
-            end: other.end,
+            start: self.start.min(other.start),
+            end: self.end.max(other.end),
         }
     }
 }

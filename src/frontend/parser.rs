@@ -83,6 +83,9 @@ pub enum Expr {
     Call { callee: Box<ExprSpanned>, args: Vec<ExprSpanned> },
     Assign { target: Box<ExprSpanned>, value: Box<ExprSpanned> },
 
+    Field { base: Box<ExprSpanned>, name: (String, Span) },
+    // index access
+
     Unary { op: UnaryOp, rhs: Box<ExprSpanned> },
     Binary { lhs: Box<ExprSpanned>, op: Operator, rhs: Box<ExprSpanned> },
 }
@@ -324,6 +327,17 @@ impl Parser {
         }
     }
 
+    fn parse_field(&mut self, base: ExprSpanned) -> Result<ExprSpanned, ParseError> {
+        let dot = self.expect(Expected::Token(TokenKind::Dot))?;
+        let (name, name_span) = self.expect_ident()?;
+
+        let span = base.span.join(name_span);
+        Ok(Spanned {
+            node: Expr::Field { base: Box::new(base), name: (name, name_span) },
+            span,
+        })
+    }
+
     fn parse_call(&mut self, callee: ExprSpanned) -> Result<ExprSpanned, ParseError> {
         let lparen = self.expect(Expected::Token(TokenKind::LParen))?;
 
@@ -361,6 +375,10 @@ impl Parser {
         let mut lhs = self.parse_primary()?;
         while self.peek_is(&TokenKind::LParen) {
             lhs = self.parse_call(lhs)?;
+        }
+
+        while self.peek_is(&TokenKind::Dot) {
+            lhs = self.parse_field(lhs)?;
         }
 
         while let Some(token) = self.peek() {
