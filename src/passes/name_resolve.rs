@@ -38,9 +38,15 @@ struct HirExpr {
 }
 
 #[derive(Debug)]
+struct HirParam {
+    name: Symbol,
+    span: Span,
+}
+
+#[derive(Debug)]
 struct HirFunc {
     body: Box<HirBlock>,
-    //TODO: params
+    params: Vec<HirParam>,
 }
 
 #[derive(Debug)]
@@ -52,7 +58,8 @@ struct HirBlock {
 #[derive(Debug)]
 enum HirStmt {
     Decl { name: Symbol, init: Option<HirExpr> },
-    FuncDecl { name: Symbol, init: HirBlock },
+    FuncDecl { name: Symbol, params: Vec<HirParam>, init: HirBlock },
+
     While { cond: HirExpr, body: HirBlock },
     If { cond: HirExpr, then_block: HirBlock, else_block: Option<HirBlock> },
 
@@ -75,7 +82,7 @@ fn lookup_var(ctx: &PassContext, symbol: Symbol) -> Option<DefId> {
     }
 }
 
-fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span) {
+fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span, def_kind: DefKind) {
     if ctx.scope(ctx.current_scope).bindings.get(&symbol).is_some() {
         ctx.diags.push(Diagnostic::error("redefinition of identifier", span));
         return;
@@ -89,7 +96,7 @@ fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span) {
     ctx.defs.push(Def {
         name: symbol,
         span,
-        kind: DefKind::LocalVar
+        kind: def_kind,
     });
 }
 
@@ -104,6 +111,37 @@ fn use_name(ctx: &mut PassContext, name: &String, span: Span) -> HirExpr {
         kind: HirExprKind::VarRef { def: def_id },
         span
     }
+}
+
+fn lower_function_scoped(
+    ctx: &mut PassContext,
+    func_name: Option<(Symbol, Span)>,
+    body: &Block,
+    params: &[(String, Span)]
+) -> (HirBlock, Vec<HirParam>) {
+    // we push scope here so function params has the same scope as the block
+    ctx.push_scope();
+
+    let mut new_params = Vec::new();
+    for (name, name_span) in params {
+        let symbol = ctx.interner.intern(&name);
+
+        // warning about recusion not possible if paramter shadows function
+        if matches!(func_name, Some((f_sym, f_span)) if f_sym == symbol) {
+            ctx.diags.push(Diagnostic::warning(
+                "parameter shadows function name",
+                *name_span
+            ));
+        }
+
+        declare_var(ctx, symbol, *name_span, DefKind::Param);
+        let param = HirParam { name: symbol, span: *name_span };
+        new_params.push(param);
+    }
+
+    let block = traverse_block(ctx, body);
+    ctx.pop_scope();
+    (block, new_params)
 }
 
 fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
@@ -128,9 +166,12 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
         },
 
         Expr::Func(f) => {
-            let block = traverse_block(ctx, &f.body);
+            let (block, params) = lower_function_scoped(ctx, None, &f.body, &f.params);
             HirExpr {
-                kind: HirExprKind::Func(HirFunc { body: Box::new(block) }),
+                kind: HirExprKind::Func(HirFunc {
+                    body: Box::new(block),
+                    params
+                }),
                 span: expr.span
             }
         },
@@ -156,8 +197,6 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
         Expr::Assign { target, value, .. } => {
             let target_expr = traverse_expr(ctx, target);
             let value_expr = traverse_expr(ctx, value);
-
-            println!("{:?}", target_expr);
 
             HirExpr {
                 kind: HirExprKind::Assign {
@@ -222,54 +261,71 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
 
             // we declare var after traversing, so local x = x + 1
             // isn't valid if it's referencing itself
-            declare_var(ctx, symbol, *name_span);
+            declare_var(ctx, symbol, *name_span, DefKind::LocalVar);
             HirStmt::Decl { name: symbol, init }
         },
-        Stmt::FuncDecl { name: (name, name_span), init } => {
+
+        // we may need to separate these in the future, but right now they are the exact same
+        Stmt::FuncDecl { name: (name, name_span), init } |
+        Stmt::LocalFuncDecl { name: (name, name_span), init } => {
             let symbol = ctx.interner.intern(name);
-            declare_var(ctx, symbol, *name_span);
-            let body = traverse_block(ctx, &init.body);
-            HirStmt::FuncDecl { name: symbol, init: body }
+
+            // here we declare var before traversing, to allow for function
+            // recursion inside local function a() { a() }
+            declare_var(ctx, symbol, *name_span, DefKind::Function);
+
+            let (block, params) = lower_function_scoped(
+                ctx,
+                Some((symbol, *name_span)),
+                &init.body,
+                &init.params
+            );
+            HirStmt::FuncDecl { name: symbol, params, init: block }
         },
+
         Stmt::While { cond, body, .. } => {
             let expr = traverse_expr(ctx, cond);
-            let block = traverse_block(ctx, body);
+            let block = traverse_block_scoped(ctx, body);
             HirStmt::While { cond: expr, body: block }
         },
         Stmt::If { cond, then_block, else_block } => {
             let expr = traverse_expr(ctx, cond);
-            let then_block = traverse_block(ctx, then_block);
-            let else_block = else_block.as_ref().map(|b| traverse_block(ctx, b));
+            let then_block = traverse_block_scoped(ctx, then_block);
+            let else_block = else_block.as_ref().map(|b| traverse_block_scoped(ctx, b));
             HirStmt::If { cond: expr, then_block, else_block }
         },
         Stmt::Return(expr) => {
             let expr = expr.as_ref().map(|e| traverse_expr(ctx, e));
             HirStmt::Return(expr)
         },
-        Stmt::Break => HirStmt::Break,
-        Stmt::Continue => HirStmt::Continue,
         Stmt::Block(block) => {
-            let block = traverse_block(ctx, block);
+            let block = traverse_block_scoped(ctx, block);
             HirStmt::Block(block)
         },
         Stmt::ExprStmt(expr) => {
             let expr = traverse_expr(ctx, expr);
             HirStmt::Expr(expr)
         },
+
+        Stmt::Break => HirStmt::Break,
+        Stmt::Continue => HirStmt::Continue,
     }
 }
 
 fn traverse_block(ctx: &mut PassContext, block: &Block) -> HirBlock {
     let mut stmts = Vec::new();
-    ctx.push_scope();
-
     for stmt in &block.stmts {
         let hir_stmt = traverse_stmt(ctx, &stmt);
         stmts.push(hir_stmt);
     }
-
-    ctx.pop_scope();
     HirBlock { stmts, span: block.span }
+}
+
+fn traverse_block_scoped(ctx: &mut PassContext, block: &Block) -> HirBlock {
+    ctx.push_scope();
+    let block = traverse_block(ctx, block);
+    ctx.pop_scope();
+    block
 }
 
 pub fn run(ctx: &mut PassContext, ast: &Vec<Stmt>) {

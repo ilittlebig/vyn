@@ -2,8 +2,13 @@
 //local a = 5;
 //local b = 0;
 
+local function a(a) {}
+local function b(a) {}
+
+/*
 local a = 0;
 local b = a[123]
+*/
 
 /*
 local a = 0;

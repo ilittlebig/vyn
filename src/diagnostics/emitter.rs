@@ -26,6 +26,10 @@ impl Diagnostic {
     pub fn error(message: impl Into<Cow<'static, str>>, span: Span) -> Diagnostic {
         Diagnostic { severity: Severity::Error, message: message.into(), span }
     }
+
+    pub fn warning(message: impl Into<Cow<'static, str>>, span: Span) -> Diagnostic {
+        Diagnostic { severity: Severity::Warning, message: message.into(), span }
+    }
 }
 
 pub struct Emitter {

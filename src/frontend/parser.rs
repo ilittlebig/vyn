@@ -66,7 +66,7 @@ pub struct Block {
 #[derive(Debug, Clone)]
 pub struct Func {
     pub body: Box<Block>,
-    //TODO: params
+    pub params: Vec<(String, Span)>,
 }
 
 pub type ExprSpanned = Spanned<Expr>;
@@ -94,6 +94,7 @@ pub enum Expr {
 pub enum Stmt {
     Decl { name: (String, Span), ty: Option<TypeRef>, init: Option<ExprSpanned> },
     FuncDecl { name: (String, Span), init: Func },
+    LocalFuncDecl { name: (String, Span), init: Func },
 
     If { cond: ExprSpanned, then_block: Block, else_block: Option<Block> },
     While { cond: ExprSpanned, body: Block },
@@ -272,13 +273,13 @@ impl Parser {
             TokenKind::Keyword(Keyword::Function) => {
                 let fn_token = self.bump();
                 let lparen = self.expect(Expected::Token(TokenKind::LParen))?;
-                // TODO: function params
+                let params = self.parse_params()?;
                 self.expect_closing(TokenKind::RParen, lparen.span)?;
 
                 let body = self.parse_block()?;
                 let span = fn_token.span.join(body.span);
                 return Ok(Spanned {
-                    node: Expr::Func(Func { body: Box::new(body) }),
+                    node: Expr::Func(Func { body: Box::new(body), params }),
                     span
                 });
             },
@@ -327,6 +328,7 @@ impl Parser {
         }
     }
 
+    // a.b
     fn parse_field(&mut self, base: ExprSpanned) -> Result<ExprSpanned, ParseError> {
         let dot = self.expect(Expected::Token(TokenKind::Dot))?;
         let (name, name_span) = self.expect_ident()?;
@@ -338,6 +340,7 @@ impl Parser {
         })
     }
 
+    // a[i]
     fn parse_index(&mut self, base: ExprSpanned) -> Result<ExprSpanned, ParseError> {
         self.expect(Expected::Token(TokenKind::LBracket))?;
         let expr = self.parse_expr()?;
@@ -350,9 +353,7 @@ impl Parser {
         })
     }
 
-    fn parse_call(&mut self, callee: ExprSpanned) -> Result<ExprSpanned, ParseError> {
-        let lparen = self.expect(Expected::Token(TokenKind::LParen))?;
-
+    fn parse_args(&mut self) -> Result<Vec<ExprSpanned>, ParseError> {
         let mut args = Vec::new();
         if !self.peek_is(&TokenKind::RParen) {
             loop {
@@ -374,8 +375,39 @@ impl Parser {
                 break;
             }
         }
+        Ok(args)
+    }
 
+    fn parse_params(&mut self) -> Result<Vec<(String, Span)>, ParseError> {
+        let mut params = Vec::new();
+        if !self.peek_is(&TokenKind::RParen) {
+            loop {
+                let ident = self.expect_ident()?;
+                params.push(ident);
+
+                if self.consume_if(Expected::Token(TokenKind::Comma)).is_some() {
+                    // no trailing comma allowed
+                    if self.peek_is(&TokenKind::RParen) {
+                        let token = self.peek().unwrap();
+                        return Err(ParseError {
+                            expected: Expected::PrimaryExpression,
+                            found: TokenKind::RParen,
+                            span: token.span
+                        });
+                    }
+                    continue;
+                }
+                break;
+            }
+        }
+        Ok(params)
+    }
+
+    fn parse_call(&mut self, callee: ExprSpanned) -> Result<ExprSpanned, ParseError> {
+        let lparen = self.expect(Expected::Token(TokenKind::LParen))?;
+        let args = self.parse_args()?;
         let rparen = self.expect_closing(TokenKind::RParen, lparen.span)?;
+
         let span = callee.span.join(rparen.span);
         Ok(Spanned {
             node: Expr::Call { callee: Box::new(callee), args },
@@ -479,25 +511,17 @@ impl Parser {
         self.expect(Expected::Keyword(Keyword::Local))?;
 
         if self.peek_is(&TokenKind::Keyword(Keyword::Function)) {
-            let fn_token = self.expect(Expected::Keyword(Keyword::Function))?;
+            self.expect(Expected::Keyword(Keyword::Function))?;
             let (name, name_span) = self.expect_ident()?;
 
             let lparen = self.expect(Expected::Token(TokenKind::LParen))?;
-            // TODO: function params
+            let params = self.parse_params()?;
             self.expect_closing(TokenKind::RParen, lparen.span)?;
 
             let body = self.parse_block()?;
-            let span = fn_token.span.join(body.span);
-
-            let expr = Spanned {
-                node: Expr::Func(Func { body: Box::new(body) }),
-                span
-            };
-
-            Ok(Stmt::Decl {
+            Ok(Stmt::LocalFuncDecl {
                 name: (name, name_span),
-                ty: None,
-                init: Some(expr)
+                init: Func { body: Box::new(body), params }
             })
         } else {
             let (name, name_span) = self.expect_ident()?;
@@ -541,13 +565,13 @@ impl Parser {
         let (name, name_span) = self.expect_ident()?;
 
         let lparen = self.expect(Expected::Token(TokenKind::LParen))?;
-        // TODO: function params
+        let params = self.parse_params()?;
         self.expect_closing(TokenKind::RParen, lparen.span)?;
 
         let body = self.parse_block()?;
         Ok(Stmt::FuncDecl {
             name: (name, name_span),
-            init: Func { body: Box::new(body) }
+            init: Func { body: Box::new(body), params }
         })
     }
 
