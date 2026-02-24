@@ -10,24 +10,28 @@ use crate::passes::{ PassContext, Symbol, Def, DefId, DefKind, Scope };
 use crate::frontend::parser::{ Stmt, Expr, Block, UnaryOp };
 use crate::frontend::lexer::Operator;
 
-type HirExprSpanned = Spanned<HirExpr>;
-
 #[derive(Debug)]
-enum HirExpr {
+enum HirExprKind {
     String(String),
     Int(i64),
     Bool(bool),
     Nil,
 
     Func(Func),
-    Call { callee: Box<HirExprSpanned>, args: Vec<HirExprSpanned> },
-    Assign { target: Box<HirExprSpanned>, value: Box<HirExprSpanned> },
+    Call { callee: Box<HirExpr>, args: Vec<HirExpr> },
+    Assign { target: Box<HirExpr>, value: Box<HirExpr> },
 
-    Unary { op: UnaryOp, rhs: Box<HirExprSpanned> },
-    Binary { lhs: Box<HirExprSpanned>, op: Operator, rhs: Box<HirExprSpanned> },
+    Unary { op: UnaryOp, rhs: Box<HirExpr> },
+    Binary { lhs: Box<HirExpr>, op: Operator, rhs: Box<HirExpr> },
 
     VarRef { def: DefId },
     Error,
+}
+
+#[derive(Debug)]
+struct HirExpr {
+    kind: HirExprKind,
+    span: Span,
 }
 
 #[derive(Debug)]
@@ -44,8 +48,8 @@ struct HirBlock {
 
 #[derive(Debug)]
 enum HirStmt {
-    Decl { name: Symbol, init: Option<HirExprSpanned> },
-    While { cond: HirExprSpanned, body: HirBlock },
+    Decl { name: Symbol, init: Option<HirExpr> },
+    While { cond: HirExpr, body: HirBlock },
 }
 
 fn lookup_var(ctx: &PassContext, symbol: Symbol) -> Option<DefId> {
@@ -76,60 +80,101 @@ fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span) {
 fn use_name(ctx: &mut PassContext, name: &String) -> HirExpr {
     let symbol = ctx.interner.intern(name);
     let Some(def_id) = lookup_var(ctx, symbol) else {
-        return HirExpr::Error;
+        return HirExpr {
+            kind: HirExprKind::Error,
+            span: Span { start: 0, end: 0 },
+        }
     };
-    HirExpr::VarRef { def: def_id }
+
+    HirExpr {
+        kind: HirExprKind::VarRef { def: def_id },
+        span: Span { start: 0, end: 0 },
+    }
 }
 
 fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
     let node = &expr.node;
     match node {
-        Expr::String(s) => HirExpr::String(s.to_string()),
-        Expr::Int(i) => HirExpr::Int(*i),
+        Expr::String(s) => HirExpr {
+            kind: HirExprKind::String(s.to_string()),
+            span: Span { start: 0, end: 0 },
+        },
+        Expr::Int(i) => HirExpr {
+            kind: HirExprKind::Int(*i),
+            span: Span { start: 0, end: 0 },
+        },
         Expr::Ident(name) => use_name(ctx, name),
-        Expr::Bool(b) => HirExpr::Bool(*b),
-        Expr::Nil => HirExpr::Nil,
+        Expr::Bool(b) => HirExpr {
+            kind: HirExprKind::Bool(*b),
+            span: Span { start: 0, end: 0 },
+        },
+        Expr::Nil => HirExpr {
+            kind: HirExprKind::Nil,
+            span: Span { start: 0, end: 0 },
+        },
 
         Expr::Func(f) => {
             let block = traverse_block(ctx, &f.body);
-            HirExpr::Func(Func { body: Box::new(block) })
+            let span = block.span.clone();
+
+            HirExpr {
+                kind: HirExprKind::Func(Func { body: Box::new(block) }),
+                span
+            }
         },
+
         Expr::Call { callee, args, .. } => {
             let callee_expr = traverse_expr(ctx, callee);
 
             let mut new_args = Vec::new();
             for arg in args {
                 let expr = traverse_expr(ctx, arg);
-                new_args.push(Spanned { node: expr, span: arg.span });
+                new_args.push(expr);
             }
 
-            HirExpr::Call {
-                callee: Box::new(Spanned { node: callee_expr, span: callee.span }),
-                args: new_args
+            HirExpr {
+                kind: HirExprKind::Call {
+                    callee: Box::new(callee_expr),
+                    args: new_args
+                },
+                span: Span { start: 0, end: 0 },
             }
         },
+
         Expr::Assign { target, value, .. } => {
             let target_expr = traverse_expr(ctx, target);
             let value_expr = traverse_expr(ctx, value);
-            HirExpr::Assign {
-                target: Box::new(Spanned { node: target_expr, span: target.span }),
-                value: Box::new(Spanned { node: value_expr, span: value.span }),
+
+            HirExpr {
+                kind: HirExprKind::Assign {
+                    target: Box::new(target_expr),
+                    value: Box::new(value_expr),
+                },
+                span: Span { start: 0, end: 0 },
             }
         },
+
         Expr::Unary { op, rhs, .. } => {
             let rhs_expr = traverse_expr(ctx, rhs);
-            HirExpr::Unary {
-                op: op.clone(),
-                rhs: Box::new(Spanned { node: rhs_expr, span: rhs.span }),
+            HirExpr {
+                kind: HirExprKind::Unary {
+                    op: op.clone(),
+                    rhs: Box::new(rhs_expr),
+                },
+                span: Span { start: 0, end: 0 },
             }
         },
+
         Expr::Binary { lhs, op, rhs, .. } => {
             let lhs_expr = traverse_expr(ctx, lhs);
             let rhs_expr = traverse_expr(ctx, rhs);
-            HirExpr::Binary {
-                lhs: Box::new(Spanned { node: lhs_expr, span: lhs.span }),
-                op: op.clone(),
-                rhs: Box::new(Spanned { node: rhs_expr, span: rhs.span }),
+            HirExpr {
+                kind: HirExprKind::Binary {
+                    lhs: Box::new(lhs_expr),
+                    op: op.clone(),
+                    rhs: Box::new(rhs_expr),
+                },
+                span: Span { start: 0, end: 0 },
             }
         },
     }
@@ -139,10 +184,7 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
     match stmt {
         Stmt::Decl { name: (name, name_span), init, .. } => {
             let symbol = ctx.interner.intern(name);
-            let init = init.as_ref().map(|e| {
-                let expr = traverse_expr(ctx, e);
-                Spanned { node: expr, span: e.span }
-            });
+            let init = init.as_ref().map(|e| traverse_expr(ctx, e));
 
             // we declare var after traversing, so local x = x + 1
             // isn't valid if it's referencing itself
@@ -151,9 +193,8 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
         },
         Stmt::While { cond, body, .. } => {
             let expr = traverse_expr(ctx, cond);
-            let cond = Spanned { node: expr, span: cond.span };
             let block = traverse_block(ctx, body);
-            HirStmt::While { cond, body: block }
+            HirStmt::While { cond: expr, body: block }
         },
         _ => { todo!(); },
     }
