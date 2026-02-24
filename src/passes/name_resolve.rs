@@ -22,7 +22,7 @@ enum HirExprKind {
     Assign { target: Box<HirExpr>, value: Box<HirExpr> },
 
     Field { base: Box<HirExpr>, name: Symbol },
-    // index access
+    Index { base: Box<HirExpr>, index: Box<HirExpr> },
 
     Unary { op: UnaryOp, rhs: Box<HirExpr> },
     Binary { lhs: Box<HirExpr>, op: Operator, rhs: Box<HirExpr> },
@@ -200,7 +200,17 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
                 kind: HirExprKind::Field { base: Box::new(base_expr), name: symbol },
                 span: expr.span,
             }
-        }
+        },
+
+        Expr::Index { base, index } => {
+            let base_expr = traverse_expr(ctx, base);
+            let index_expr = traverse_expr(ctx, index);
+
+            HirExpr {
+                kind: HirExprKind::Index { base: Box::new(base_expr), index: Box::new(index_expr) },
+                span: expr.span,
+            }
+        },
     }
 }
 

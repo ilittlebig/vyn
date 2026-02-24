@@ -3,8 +3,13 @@
 //local b = 0;
 
 local a = 0;
-local b = a().c
+local b = a[123]
+
+/*
+local a = 0;
+local b = a(a, 12, a).c.d.e
 local c = 0;
+*/
 
 /*
 local a = 0

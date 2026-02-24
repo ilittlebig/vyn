@@ -84,7 +84,7 @@ pub enum Expr {
     Assign { target: Box<ExprSpanned>, value: Box<ExprSpanned> },
 
     Field { base: Box<ExprSpanned>, name: (String, Span) },
-    // index access
+    Index { base: Box<ExprSpanned>, index: Box<ExprSpanned> },
 
     Unary { op: UnaryOp, rhs: Box<ExprSpanned> },
     Binary { lhs: Box<ExprSpanned>, op: Operator, rhs: Box<ExprSpanned> },
@@ -338,6 +338,18 @@ impl Parser {
         })
     }
 
+    fn parse_index(&mut self, base: ExprSpanned) -> Result<ExprSpanned, ParseError> {
+        self.expect(Expected::Token(TokenKind::LBracket))?;
+        let expr = self.parse_expr()?;
+        let r_bracket = self.expect(Expected::Token(TokenKind::RBracket))?;
+
+        let span = base.span.join(r_bracket.span);
+        Ok(Spanned {
+            node: Expr::Index { base: Box::new(base), index: Box::new(expr) },
+            span,
+        })
+    }
+
     fn parse_call(&mut self, callee: ExprSpanned) -> Result<ExprSpanned, ParseError> {
         let lparen = self.expect(Expected::Token(TokenKind::LParen))?;
 
@@ -379,6 +391,10 @@ impl Parser {
 
         while self.peek_is(&TokenKind::Dot) {
             lhs = self.parse_field(lhs)?;
+        }
+
+        while self.peek_is(&TokenKind::LBracket) {
+            lhs = self.parse_index(lhs)?;
         }
 
         while let Some(token) = self.peek() {

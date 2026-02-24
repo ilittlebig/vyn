@@ -113,6 +113,8 @@ pub enum TokenKind {
     RParen,
     LBrace,
     RBrace,
+    LBracket,
+    RBracket,
     Keyword(Keyword),
     Operator(Operator),
     Assignment,
@@ -135,6 +137,8 @@ impl TokenKind {
             TokenKind::RParen => "`)`".into(),
             TokenKind::LBrace => "`{`".into(),
             TokenKind::RBrace => "`}`".into(),
+            TokenKind::LBracket => "`[`".into(),
+            TokenKind::RBracket => "`]`".into(),
             TokenKind::Keyword(k) => format!("keyword `{}`", k.describe()).into(),
             TokenKind::Operator(o) => format!("operator `{}`", o.describe()).into(),
             TokenKind::Assignment => "`=`".into(),
@@ -540,6 +544,12 @@ impl Lexer {
         } else if b == b'}' {
             self.bump();
             return self.token(TokenKind::RBrace, start, self.current_pos);
+        } else if b == b'[' {
+            self.bump();
+            return self.token(TokenKind::LBracket, start, self.current_pos);
+        } else if b == b']' {
+            self.bump();
+            return self.token(TokenKind::RBracket, start, self.current_pos);
         }
         self.bump();
 
