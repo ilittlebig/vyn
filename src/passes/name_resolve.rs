@@ -73,7 +73,7 @@ fn lookup_var(ctx: &PassContext, symbol: Symbol) -> Option<DefId> {
 }
 
 fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span) {
-    if lookup_var(ctx, symbol).is_some() {
+    if ctx.scope(ctx.current_scope).bindings.get(&symbol).is_some() {
         ctx.diags.push(Diagnostic::error("redefinition of identifier", span));
         return;
     }
@@ -92,13 +92,13 @@ fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span) {
 
 fn use_name(ctx: &mut PassContext, name: &String, span: Span) -> HirExpr {
     let symbol = ctx.interner.intern(name);
-    let Some(def_id) = ctx.scope(ctx.current_scope).bindings.get(&symbol) else {
+    let Some(def_id) = lookup_var(ctx, symbol) else {
         ctx.diags.push(Diagnostic::error("use of undeclared identifier", span));
         return HirExpr { kind: HirExprKind::Error, span }
     };
 
     HirExpr {
-        kind: HirExprKind::VarRef { def: *def_id },
+        kind: HirExprKind::VarRef { def: def_id },
         span
     }
 }
