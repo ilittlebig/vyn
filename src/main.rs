@@ -8,6 +8,7 @@
 use std::fs;
 
 mod frontend;
+mod passes;
 mod diagnostics;
 mod source;
 mod driver;

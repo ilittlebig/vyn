@@ -5,6 +5,7 @@
  * Created: 2026-02-05
  **/
 
+use crate::passes;
 use crate::frontend::lexer;
 use crate::frontend::parser;
 use crate::diagnostics::{ Emitter, Diagnostic };
@@ -13,7 +14,9 @@ pub fn drive(filename: &str, input: String) {
     let lexer_output = lexer::tokenize(filename.to_string(), input);
     let (stmts, parse_errors) = parser::parse_program(lexer_output.file.clone(), lexer_output.tokens);
 
-    println!("stmts: {:?}", stmts);
+    //println!("stmts: {:?}", stmts);
+
+    passes::run_passes(&stmts);
 
     let mut emitter = Emitter::stderr();
     for e in parse_errors {

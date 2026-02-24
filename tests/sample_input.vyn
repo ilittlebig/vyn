@@ -1,9 +1,11 @@
-while cond {
-    return
+local a = 1;
+//local b = 0;
+while a+b {
+    //return
 }
 
 // local a = "hello wolrd";
-local a = "hello wolrd";
+//local a = "hello wolrd";
 
 /*
 if (lol) {

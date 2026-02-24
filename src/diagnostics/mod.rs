@@ -8,3 +8,4 @@ pub use self::emitter::Emitter;
 pub use self::emitter::Diagnostic;
 
 pub use self::span::Span;
+pub use self::span::Spanned;

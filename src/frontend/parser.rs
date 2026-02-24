@@ -5,8 +5,8 @@
  * Created: 2026-02-03
  **/
 
-use crate::diagnostics::Span;
 use crate::source::SourceFile;
+use crate::diagnostics::{ Span, Spanned };
 use crate::frontend::lexer::{ Token, TokenKind, Keyword, Operator };
 
 #[derive(Debug, Clone)]
@@ -47,11 +47,11 @@ impl Expected {
 
 #[derive(Debug, Clone)]
 enum TypeRef {
-    Named(String) // int, string
+    Named(String, Span) // int, string
 }
 
 #[derive(Debug, Clone)]
-enum UnaryOp {
+pub enum UnaryOp {
     Neg,
     Not,
     Plus,
@@ -64,15 +64,9 @@ pub struct Block {
 }
 
 #[derive(Debug, Clone)]
-struct Func {
-    body: Box<Block>,
+pub struct Func {
+    pub body: Box<Block>,
     //TODO: params
-}
-
-#[derive(Debug, Clone)]
-pub struct Spanned<T> {
-    pub node: T,
-    pub span: Span,
 }
 
 pub type ExprSpanned = Spanned<Expr>;
@@ -95,7 +89,7 @@ pub enum Expr {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Decl { name: String, ty: Option<TypeRef>, init: Option<ExprSpanned> },
+    Decl { name: (String, Span), ty: Option<TypeRef>, init: Option<ExprSpanned> },
     FuncDecl { name: String, init: Func },
 
     If { cond: ExprSpanned, then_block: Block, else_block: Option<Block> },
@@ -452,7 +446,7 @@ impl Parser {
 
         if self.peek_is(&TokenKind::Keyword(Keyword::Function)) {
             let fn_token = self.expect(Expected::Keyword(Keyword::Function))?;
-            let (name, _) = self.expect_ident()?;
+            let (name, name_span) = self.expect_ident()?;
 
             let lparen = self.expect(Expected::Token(TokenKind::LParen))?;
             // TODO: function params
@@ -465,12 +459,17 @@ impl Parser {
                 node: Expr::Func(Func { body: Box::new(body) }),
                 span
             };
-            Ok(Stmt::Decl { name, ty: None, init: Some(expr) })
+
+            Ok(Stmt::Decl {
+                name: (name, name_span),
+                ty: None,
+                init: Some(expr)
+            })
         } else {
-            let (name, _) = self.expect_ident()?;
+            let (name, name_span) = self.expect_ident()?;
             let ty = if self.consume_if(Expected::Token(TokenKind::Colon)).is_some() {
-                let (name, _) = self.expect_ident()?;
-                Some(TypeRef::Named(name))
+                let (type_name, type_span) = self.expect_ident()?;
+                Some(TypeRef::Named(type_name, type_span))
             } else {
                 None
             };
@@ -499,7 +498,7 @@ impl Parser {
                     });
                 }
             }
-            Ok(Stmt::Decl { name, ty, init })
+            Ok(Stmt::Decl { name: (name, name_span), ty, init })
         }
     }
 
