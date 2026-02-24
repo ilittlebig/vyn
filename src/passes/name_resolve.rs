@@ -92,13 +92,13 @@ fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span) {
 
 fn use_name(ctx: &mut PassContext, name: &String, span: Span) -> HirExpr {
     let symbol = ctx.interner.intern(name);
-    let Some(def_id) = lookup_var(ctx, symbol) else {
+    let Some(def_id) = ctx.scope(ctx.current_scope).bindings.get(&symbol) else {
         ctx.diags.push(Diagnostic::error("use of undeclared identifier", span));
         return HirExpr { kind: HirExprKind::Error, span }
     };
 
     HirExpr {
-        kind: HirExprKind::VarRef { def: def_id },
+        kind: HirExprKind::VarRef { def: *def_id },
         span
     }
 }
