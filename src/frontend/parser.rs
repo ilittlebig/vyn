@@ -90,7 +90,7 @@ pub enum Expr {
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Decl { name: (String, Span), ty: Option<TypeRef>, init: Option<ExprSpanned> },
-    FuncDecl { name: String, init: Func },
+    FuncDecl { name: (String, Span), init: Func },
 
     If { cond: ExprSpanned, then_block: Block, else_block: Option<Block> },
     While { cond: ExprSpanned, body: Block },
@@ -504,14 +504,17 @@ impl Parser {
 
     fn parse_func_decl_stmt(&mut self) -> Result<Stmt, ParseError> {
         self.expect(Expected::Keyword(Keyword::Function))?;
-        let (name, _) = self.expect_ident()?;
+        let (name, name_span) = self.expect_ident()?;
 
         let lparen = self.expect(Expected::Token(TokenKind::LParen))?;
         // TODO: function params
         self.expect_closing(TokenKind::RParen, lparen.span)?;
 
         let body = self.parse_block()?;
-        Ok(Stmt::FuncDecl { name, init: Func { body: Box::new(body) }})
+        Ok(Stmt::FuncDecl {
+            name: (name, name_span),
+            init: Func { body: Box::new(body) }
+        })
     }
 
     fn parse_block(&mut self) -> Result<Block, ParseError> {

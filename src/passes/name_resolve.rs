@@ -17,7 +17,7 @@ enum HirExprKind {
     Bool(bool),
     Nil,
 
-    Func(Func),
+    Func(HirFunc),
     Call { callee: Box<HirExpr>, args: Vec<HirExpr> },
     Assign { target: Box<HirExpr>, value: Box<HirExpr> },
 
@@ -35,7 +35,7 @@ struct HirExpr {
 }
 
 #[derive(Debug)]
-struct Func {
+struct HirFunc {
     body: Box<HirBlock>,
     //TODO: params
 }
@@ -49,9 +49,16 @@ struct HirBlock {
 #[derive(Debug)]
 enum HirStmt {
     Decl { name: Symbol, init: Option<HirExpr> },
+    FuncDecl { name: Symbol, init: HirBlock },
     While { cond: HirExpr, body: HirBlock },
     If { cond: HirExpr, then_block: HirBlock, else_block: Option<HirBlock> },
+
     Return(Option<HirExpr>),
+    Break,
+    Continue,
+
+    Block(HirBlock),
+    Expr(HirExpr),
 }
 
 fn lookup_var(ctx: &PassContext, symbol: Symbol) -> Option<DefId> {
@@ -67,7 +74,7 @@ fn lookup_var(ctx: &PassContext, symbol: Symbol) -> Option<DefId> {
 
 fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span) {
     if lookup_var(ctx, symbol).is_some() {
-        ctx.diags.push(Diagnostic::error("redefinition of variable", span));
+        ctx.diags.push(Diagnostic::error("redefinition of identifier", span));
         return;
     }
 
@@ -86,7 +93,7 @@ fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span) {
 fn use_name(ctx: &mut PassContext, name: &String, span: Span) -> HirExpr {
     let symbol = ctx.interner.intern(name);
     let Some(def_id) = lookup_var(ctx, symbol) else {
-        ctx.diags.push(Diagnostic::error("use of undeclared variable", span));
+        ctx.diags.push(Diagnostic::error("use of undeclared identifier", span));
         return HirExpr { kind: HirExprKind::Error, span }
     };
 
@@ -120,7 +127,7 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
         Expr::Func(f) => {
             let block = traverse_block(ctx, &f.body);
             HirExpr {
-                kind: HirExprKind::Func(Func { body: Box::new(block) }),
+                kind: HirExprKind::Func(HirFunc { body: Box::new(block) }),
                 span: expr.span
             }
         },
@@ -193,6 +200,12 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
             declare_var(ctx, symbol, *name_span);
             HirStmt::Decl { name: symbol, init }
         },
+        Stmt::FuncDecl { name: (name, name_span), init } => {
+            let symbol = ctx.interner.intern(name);
+            declare_var(ctx, symbol, *name_span);
+            let body = traverse_block(ctx, &init.body);
+            HirStmt::FuncDecl { name: symbol, init: body }
+        },
         Stmt::While { cond, body, .. } => {
             let expr = traverse_expr(ctx, cond);
             let block = traverse_block(ctx, body);
@@ -207,8 +220,17 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
         Stmt::Return(expr) => {
             let expr = expr.as_ref().map(|e| traverse_expr(ctx, e));
             HirStmt::Return(expr)
-        }
-        _ => { todo!(); },
+        },
+        Stmt::Break => HirStmt::Break,
+        Stmt::Continue => HirStmt::Continue,
+        Stmt::Block(block) => {
+            let block = traverse_block(ctx, block);
+            HirStmt::Block(block)
+        },
+        Stmt::ExprStmt(expr) => {
+            let expr = traverse_expr(ctx, expr);
+            HirStmt::Expr(expr)
+        },
     }
 }
 
