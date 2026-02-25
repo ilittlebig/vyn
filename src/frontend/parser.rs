@@ -12,7 +12,7 @@ use crate::frontend::lexer::{ Token, TokenKind, Keyword, Operator };
 #[derive(Debug, Clone)]
 pub enum Expected {
     Identifier,
-    AnyKeyword,
+    AnyKeyword, // when would this ever be needed?
     Keyword(Keyword),
     Operator(Operator),
     Token(TokenKind),
@@ -46,8 +46,8 @@ impl Expected {
 }
 
 #[derive(Debug, Clone)]
-enum TypeRef {
-    Named(String, Span) // int, string
+pub enum TypeRef {
+    Named(String, Span) // int, string, bool, etc.
 }
 
 #[derive(Debug, Clone)]

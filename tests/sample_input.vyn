@@ -2,8 +2,12 @@
 //local a = 5;
 //local b = 0;
 
+local b: int = "hello"
+
+/*
 local function a(a) {}
 local function b(a) {}
+*/
 
 /*
 local a = 0;

@@ -5,6 +5,9 @@
  * Created: 2026-02-06
  **/
 
+use crate::passes::types;
+use crate::passes::types::Type;
+
 use crate::frontend::parser::{ Stmt, Expr, Block };
 use crate::diagnostics::{ Span, Spanned, Diagnostic };
 use crate::passes::{ PassContext, Symbol, Def, DefId, DefKind };
@@ -194,9 +197,27 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
 
 fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
     match stmt {
-        Stmt::Decl { name: (name, name_span), init, .. } => {
+        Stmt::Decl { name: (name, name_span), init, ty } => {
             let symbol = ctx.interner.intern(name);
             let init = init.as_ref().map(|e| traverse_expr(ctx, e));
+
+            //
+            let annotated = ty.as_ref().map(|t| types::lower_type_ref(ctx, &t));
+            let inferred = init.as_ref().map(|e| types::type_expr(ctx, e));
+            let def_type = annotated.or(inferred).unwrap_or(Type::Any);
+            ctx.def_types.push(def_type);
+
+            if let (Some(ann), Some(inf)) = (annotated, inferred) {
+                if !types::assignable(ann, inf) {
+                    let span = init.as_ref().map(|e| e.span).unwrap_or(*name_span);
+                    let msg = format!(
+                        "cannot assign ´{}´ to ´{}´",
+                        types::fmt_type(ctx, &inf),
+                        types::fmt_type(ctx, &ann)
+                    );
+                    ctx.diags.push(Diagnostic::error(msg, span));
+                }
+            }
 
             // we declare var after traversing, so local x = x + 1
             // isn't valid if it's referencing itself
