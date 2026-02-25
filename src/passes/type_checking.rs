@@ -10,46 +10,7 @@ use crate::passes::types::Type;
 
 use crate::passes::PassContext;
 use crate::diagnostics::Diagnostic;
-use crate::frontend::lexer::Operator;
 use crate::passes::hir::{ HirStmt, HirExpr, HirExprKind };
-
-fn check_expr(ctx: &mut PassContext, expr: &HirExpr) {
-    println!("{:?}", expr);
-    match &expr.kind {
-        HirExprKind::Assign { target, value } => {
-            let t1 = types::type_expr(ctx, &target);
-            let t2 = types::type_expr(ctx, &value);
-
-            if !types::assignable(t1, t2) {
-                let msg = format!(
-                    "cannot assign '{}' to '{}'",
-                    types::fmt_type(ctx, &t1),
-                    types::fmt_type(ctx, &t2)
-                );
-                ctx.diags.push(Diagnostic::error(msg, expr.span));
-            }
-        },
-        HirExprKind::Binary { lhs, rhs, op } => {
-            let lhs_ty = types::type_expr(ctx, &lhs);
-            let rhs_ty = types::type_expr(ctx, &rhs);
-
-            // start by just checking if the types are the same
-            if lhs_ty != rhs_ty {
-                let msg = format!(
-                    "invalid operands to binary operator '{}': '{}' and '{}",
-                    Operator::describe(op),
-                    types::fmt_type(ctx, &lhs_ty),
-                    types::fmt_type(ctx, &rhs_ty)
-                );
-
-                // ideally in the future we should add a note/label to the expressions
-                // explaining what they evaluate to, so it's clearer
-                ctx.diags.push(Diagnostic::error(msg, expr.span));
-            }
-        },
-        _ => {},
-    }
-}
 
 fn check_stmt(ctx: &mut PassContext, stmt: &HirStmt) {
     match stmt {
@@ -82,8 +43,6 @@ fn check_stmt(ctx: &mut PassContext, stmt: &HirStmt) {
                     ctx.diags.push(Diagnostic::error(msg, span));
                 }
             }
-            
-            init.as_ref().map(|e| check_expr(ctx, e));
         },
         _ => {},
     }

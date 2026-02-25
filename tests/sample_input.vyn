@@ -4,6 +4,7 @@
 
 local a: string = "string"
 local b: int = 123 + a
+local c: int = true;
 
 /*
 local function a(a) {}

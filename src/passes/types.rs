@@ -6,6 +6,8 @@
  **/
 
 use crate::frontend::parser::TypeRef;
+use crate::frontend::lexer::Operator;
+
 use crate::diagnostics::{ Span, Diagnostic };
 use crate::passes::{ PassContext, Symbol };
 use crate::passes::hir::{ HirExprKind, HirExpr, HirStmt };
@@ -51,27 +53,56 @@ pub fn assignable(t1: Type, t2: Type) -> bool {
     t1 == t2
 }
 
-pub fn type_expr(ctx: &PassContext, expr: &HirExpr) -> Type {
+pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
     match &expr.kind {
+        // builtin
         HirExprKind::String(_) => Type::Named(ctx.builtin_types.string),
         HirExprKind::Int(_) => Type::Named(ctx.builtin_types.int),
         HirExprKind::Bool(_) => Type::Named(ctx.builtin_types.bool),
         HirExprKind::Nil => Type::Named(ctx.builtin_types.nil),
 
-        HirExprKind::Binary { lhs, rhs, .. } => {
+        //
+        HirExprKind::VarRef { def: def_id } => {
+            ctx.def_types[def_id.0]
+        },
+
+        HirExprKind::Binary { lhs, rhs, op } => {
             let lhs_ty = type_expr(ctx, &lhs);
             let rhs_ty = type_expr(ctx, &rhs);
 
             // start by just checking if the types are the same
-            if lhs_ty == rhs_ty {
-                lhs_ty
-            } else {
+            if lhs_ty != rhs_ty {
+                let msg = format!(
+                    "invalid operands to binary operator '{}': '{}' and '{}",
+                    Operator::describe(op),
+                    fmt_type(ctx, &lhs_ty),
+                    fmt_type(ctx, &rhs_ty)
+                );
+
+                // ideally in the future we should add a note/label to the expressions
+                // explaining what they evaluate to, so it's clearer
+                ctx.diags.push(Diagnostic::error(msg, expr.span));
                 Type::Error
+            } else {
+                lhs_ty
             }
         },
-        HirExprKind::VarRef { def: def_id } => {
-            ctx.def_types[def_id.0]
+
+        HirExprKind::Assign { target, value } => {
+            let t1 = type_expr(ctx, &target);
+            let t2 = type_expr(ctx, &value);
+
+            if !assignable(t1, t2) {
+                let msg = format!(
+                    "cannot assign '{}' to '{}'",
+                    fmt_type(ctx, &t1),
+                    fmt_type(ctx, &t2)
+                );
+                ctx.diags.push(Diagnostic::error(msg, expr.span));
+            }
+            t1
         },
+
         _ => Type::Error
     }
 }
