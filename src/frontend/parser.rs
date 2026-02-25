@@ -330,7 +330,7 @@ impl Parser {
 
     // a.b
     fn parse_field(&mut self, base: ExprSpanned) -> Result<ExprSpanned, ParseError> {
-        let dot = self.expect(Expected::Token(TokenKind::Dot))?;
+        self.expect(Expected::Token(TokenKind::Dot))?;
         let (name, name_span) = self.expect_ident()?;
 
         let span = base.span.join(name_span);
@@ -672,7 +672,7 @@ pub fn parse_program(file: SourceFile, tokens: Vec<Token>) -> (Vec<Stmt>, Vec<Pa
 
     while let Some(token) = parser.peek() {
         if token.kind == TokenKind::Eof { break; }
-        if matches!(parser.peek().map(|t| &token.kind), Some(TokenKind::Error)) {
+        if matches!(&token.kind, TokenKind::Error) {
             parser.sync_after_error();
             continue;
         }

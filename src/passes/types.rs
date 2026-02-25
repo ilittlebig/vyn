@@ -5,12 +5,12 @@
  * Created: 2026-02-25
  **/
 
-use crate::diagnostics::Diagnostic;
 use crate::frontend::parser::TypeRef;
+use crate::diagnostics::{ Span, Diagnostic };
 use crate::passes::{ PassContext, Symbol };
 use crate::passes::hir::{ HirExprKind, HirExpr, HirStmt };
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TypeId(pub usize);
 
 pub struct BuiltinTypes {
@@ -39,7 +39,7 @@ pub struct TypeDef {
     pub kind: TypeDefKind,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Type {
     Named(TypeId),
     Any,
@@ -47,34 +47,48 @@ pub enum Type {
 }
 
 pub fn assignable(t1: Type, t2: Type) -> bool {
+    // if t1 or t2 is any, allow it
     t1 == t2
 }
 
 pub fn type_expr(ctx: &PassContext, expr: &HirExpr) -> Type {
-    match expr.kind {
+    match &expr.kind {
         HirExprKind::String(_) => Type::Named(ctx.builtin_types.string),
         HirExprKind::Int(_) => Type::Named(ctx.builtin_types.int),
         HirExprKind::Bool(_) => Type::Named(ctx.builtin_types.bool),
         HirExprKind::Nil => Type::Named(ctx.builtin_types.nil),
-        _ => Type::Error,
+
+        HirExprKind::Binary { lhs, rhs, .. } => {
+            let lhs_ty = type_expr(ctx, &lhs);
+            let rhs_ty = type_expr(ctx, &rhs);
+
+            // start by just checking if the types are the same
+            if lhs_ty == rhs_ty {
+                lhs_ty
+            } else {
+                Type::Error
+            }
+        },
+        HirExprKind::VarRef { def: def_id } => {
+            ctx.def_types[def_id.0]
+        },
+        _ => Type::Error
     }
 }
 
 // converts an identifier type to a type enum member, so we get
 // int -> Type::Int
-pub fn lower_type_ref(ctx: &mut PassContext, type_ref: &TypeRef) -> Type {
+pub fn lower_type_ref(ctx: &mut PassContext, type_ref: &TypeRef) -> (Type, Span) {
     match type_ref {
         TypeRef::Named(name, span) => {
             let symbol = ctx.interner.intern(name);
             let type_id = ctx.type_bindings.get(&symbol);
 
-            match type_id {
+            let ty = match type_id {
                 Some(id) => Type::Named(*id),
-                _ => {
-                    ctx.diags.push(Diagnostic::error("unknown type name", *span));
-                    Type::Error
-                }
-            }
+                _ => Type::Error,
+            };
+            (ty, *span)
         },
     }
 }

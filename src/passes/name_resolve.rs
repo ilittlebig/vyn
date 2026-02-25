@@ -5,9 +5,7 @@
  * Created: 2026-02-06
  **/
 
-use crate::passes::types;
 use crate::passes::types::Type;
-
 use crate::frontend::parser::{ Stmt, Expr, Block };
 use crate::diagnostics::{ Span, Spanned, Diagnostic };
 use crate::passes::{ PassContext, Symbol, Def, DefId, DefKind };
@@ -24,10 +22,11 @@ fn lookup_var(ctx: &PassContext, symbol: Symbol) -> Option<DefId> {
     }
 }
 
-fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span, def_kind: DefKind) {
-    if ctx.scope(ctx.current_scope).bindings.get(&symbol).is_some() {
+fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span, def_kind: DefKind) -> DefId {
+    let existing = ctx.scope(ctx.current_scope).bindings.get(&symbol).copied();
+    if let Some(def_id) = existing {
         ctx.diags.push(Diagnostic::error("redefinition of identifier", span));
-        return;
+        return def_id;
     }
 
     let def_id = DefId(ctx.defs.len());
@@ -40,6 +39,13 @@ fn declare_var(ctx: &mut PassContext, symbol: Symbol, span: Span, def_kind: DefK
         span,
         kind: def_kind,
     });
+
+    // make sure we have enough space to store the annotation,
+    // this gets overwritten with the real type annotation later
+    ctx.def_ann.push(None);
+    ctx.def_types.push(Type::Any);
+
+    def_id
 }
 
 fn use_name(ctx: &mut PassContext, name: &String, span: Span) -> HirExpr {
@@ -136,7 +142,7 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
             }
         },
 
-        Expr::Assign { target, value, .. } => {
+        Expr::Assign { target, value } => {
             let target_expr = traverse_expr(ctx, target);
             let value_expr = traverse_expr(ctx, value);
 
@@ -149,7 +155,7 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
             }
         },
 
-        Expr::Unary { op, rhs, .. } => {
+        Expr::Unary { op, rhs } => {
             let rhs_expr = traverse_expr(ctx, rhs);
             HirExpr {
                 kind: HirExprKind::Unary {
@@ -160,7 +166,7 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
             }
         },
 
-        Expr::Binary { lhs, op, rhs, .. } => {
+        Expr::Binary { lhs, op, rhs } => {
             let lhs_expr = traverse_expr(ctx, lhs);
             let rhs_expr = traverse_expr(ctx, rhs);
             HirExpr {
@@ -201,28 +207,11 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
             let symbol = ctx.interner.intern(name);
             let init = init.as_ref().map(|e| traverse_expr(ctx, e));
 
-            //
-            let annotated = ty.as_ref().map(|t| types::lower_type_ref(ctx, &t));
-            let inferred = init.as_ref().map(|e| types::type_expr(ctx, e));
-            let def_type = annotated.or(inferred).unwrap_or(Type::Any);
-            ctx.def_types.push(def_type);
-
-            if let (Some(ann), Some(inf)) = (annotated, inferred) {
-                if !types::assignable(ann, inf) {
-                    let span = init.as_ref().map(|e| e.span).unwrap_or(*name_span);
-                    let msg = format!(
-                        "cannot assign ´{}´ to ´{}´",
-                        types::fmt_type(ctx, &inf),
-                        types::fmt_type(ctx, &ann)
-                    );
-                    ctx.diags.push(Diagnostic::error(msg, span));
-                }
-            }
-
             // we declare var after traversing, so local x = x + 1
             // isn't valid if it's referencing itself
-            declare_var(ctx, symbol, *name_span, DefKind::LocalVar);
-            HirStmt::Decl { name: symbol, init }
+            let def_id = declare_var(ctx, symbol, *name_span, DefKind::LocalVar);
+            ctx.def_ann[def_id.0] = ty.clone();
+            HirStmt::Decl { def_id, init }
         },
 
         // we may need to separate these in the future, but right now they are the exact same

@@ -8,7 +8,7 @@
 use crate::diagnostics::Span;
 use crate::frontend::parser::UnaryOp;
 use crate::frontend::lexer::Operator;
-use crate::passes::{ Symbol, Def, DefId };
+use crate::passes::{ Symbol, DefId };
 
 #[derive(Debug)]
 pub enum HirExprKind {
@@ -57,7 +57,7 @@ pub struct HirBlock {
 
 #[derive(Debug)]
 pub enum HirStmt {
-    Decl { name: Symbol, init: Option<HirExpr> },
+    Decl { def_id: DefId, init: Option<HirExpr> },
     FuncDecl { name: Symbol, params: Vec<HirParam>, init: HirBlock },
 
     While { cond: HirExpr, body: HirBlock },

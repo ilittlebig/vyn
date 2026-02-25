@@ -2,7 +2,8 @@
 //local a = 5;
 //local b = 0;
 
-local b: int = "hello"
+local a: string = "string"
+local b: int = 123 + a
 
 /*
 local function a(a) {}

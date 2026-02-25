@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use crate::passes::types::{ Type, TypeDef, TypeDefKind, TypeId, BuiltinTypes };
-use crate::frontend::parser::Stmt;
+use crate::frontend::parser::{ TypeRef, Stmt };
 use crate::passes::interner::Interner;
 use crate::diagnostics::{ Span, Diagnostic };
 
@@ -55,6 +55,8 @@ pub struct PassContext {
 
     //
     pub def_types: Vec<Type>,
+    pub def_ann: Vec<Option<TypeRef>>,
+
     pub type_defs: Vec<TypeDef>,
     pub type_bindings: HashMap<Symbol, TypeId>,
     pub builtin_types: BuiltinTypes,
@@ -71,6 +73,8 @@ impl PassContext {
 
             // types
             def_types: Vec::new(),
+            def_ann: Vec::new(),
+
             type_defs: Vec::new(),
             type_bindings: HashMap::new(),
             builtin_types: BuiltinTypes::dummy(),
