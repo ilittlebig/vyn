@@ -22,11 +22,8 @@ if 1 + "hello" {}
 if "a" + "b" {}
 */
 
-local a: any = 1
-if a {}
-
-local x = 1
-if x != "hello" {}
+local a: double = 1.23
+if 1 == a {}
 
 /*
 local aa: lol = 1

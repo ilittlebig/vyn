@@ -99,8 +99,12 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
             kind: HirExprKind::String(s.to_string()),
             span: expr.span,
         },
-        Expr::Int(i) => HirExpr {
-            kind: HirExprKind::Int(*i),
+        Expr::Int(v) => HirExpr {
+            kind: HirExprKind::Int(*v),
+            span: expr.span,
+        },
+        Expr::Double(v) => HirExpr {
+            kind: HirExprKind::Double(*v),
             span: expr.span,
         },
         Expr::Ident(name) => use_name(ctx, name, expr.span),

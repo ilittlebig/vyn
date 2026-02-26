@@ -14,6 +14,7 @@ use crate::passes::{ Symbol, DefId };
 pub enum HirExprKind {
     String(String),
     Int(i64),
+    Double(f64),
     Bool(bool),
     Nil,
 

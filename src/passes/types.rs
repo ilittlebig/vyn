@@ -18,6 +18,7 @@ pub struct TypeId(pub usize);
 pub struct BuiltinTypes {
     pub string: TypeId,
     pub int: TypeId,
+    pub double: TypeId,
     pub bool: TypeId,
     pub nil: TypeId,
 }
@@ -25,7 +26,7 @@ pub struct BuiltinTypes {
 impl BuiltinTypes {
     pub fn dummy() -> Self {
         let z = TypeId(0);
-        BuiltinTypes { string: z, int: z, bool: z, nil: z }
+        BuiltinTypes { string: z, int: z, double: z, bool: z, nil: z }
     }
 }
 
@@ -54,12 +55,8 @@ pub struct FuncInfo<'a> {
     pub body: &'a HirBlock,
 }
 
-// works for flat types, will need to revisit later
-pub fn assignable(t1: &Type, t2: &Type) -> bool {
-    if *t1 == Type::Any || *t2 == Type::Any {
-        return true;
-    }
-    t1 == t2
+fn is_numeric_type(ctx: &PassContext, ty: &Type) -> bool {
+    *ty == Type::Named(ctx.builtin_types.int) || *ty == Type::Named(ctx.builtin_types.double)
 }
 
 fn emit_binop_type_error(ctx: &mut PassContext, lhs_ty: &Type, rhs_ty: &Type, op: &Operator, span: Span) {
@@ -75,11 +72,20 @@ fn emit_binop_type_error(ctx: &mut PassContext, lhs_ty: &Type, rhs_ty: &Type, op
     ctx.diags.push(Diagnostic::error(msg, span));
 }
 
+// works for flat types, will need to revisit later
+pub fn assignable(t1: &Type, t2: &Type) -> bool {
+    if *t1 == Type::Any || *t2 == Type::Any {
+        return true;
+    }
+    t1 == t2
+}
+
 pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
     match &expr.kind {
         // builtin
         HirExprKind::String(_) => Type::Named(ctx.builtin_types.string),
         HirExprKind::Int(_) => Type::Named(ctx.builtin_types.int),
+        HirExprKind::Double(_) => Type::Named(ctx.builtin_types.double),
         HirExprKind::Bool(_) => Type::Named(ctx.builtin_types.bool),
         HirExprKind::Nil => Type::Named(ctx.builtin_types.nil),
 
@@ -111,10 +117,10 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
                 Operator::LessThanEqual |
                 Operator::GreaterThan |
                 Operator::GreaterThanEqual => {
-                    let a = lhs_ty != Type::Named(ctx.builtin_types.int) && lhs_ty != Type::Any;
-                    let b = rhs_ty != Type::Named(ctx.builtin_types.int) && rhs_ty != Type::Any;
+                    let is_lhs_ok = is_numeric_type(ctx, &lhs_ty) || lhs_ty == Type::Any;
+                    let is_rhs_ok = is_numeric_type(ctx, &rhs_ty) || rhs_ty == Type::Any;
 
-                    if a || b {
+                    if !is_lhs_ok || !is_rhs_ok {
                         emit_binop_type_error(ctx, &lhs_ty, &rhs_ty, op, expr.span);
                         return Type::Error;
                     }

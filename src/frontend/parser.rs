@@ -75,6 +75,7 @@ pub type ExprSpanned = Spanned<Expr>;
 pub enum Expr {
     String(String),
     Int(i64),
+    Double(f64),
     Ident(String),
     Bool(bool),
     Nil,
@@ -314,6 +315,11 @@ impl Parser {
                 let token = self.bump();
                 let value = self.file.slice(&token).parse::<i64>().unwrap();
                 return Ok(Spanned { node: Expr::Int(value), span });
+            },
+            TokenKind::Double => {
+                let token = self.bump();
+                let value = self.file.slice(&token).parse::<f64>().unwrap();
+                return Ok(Spanned { node: Expr::Double(value), span });
             },
             TokenKind::Identifier => {
                 let token = self.bump();
