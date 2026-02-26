@@ -52,9 +52,6 @@ impl Emitter {
         let (line, col) = source_file.line_col(span.start);
         let (line_text, line_start, line_end) = source_file.line_span(span.start);
 
-        let w = (line + 1).to_string().len();
-        write!(out, "{}:{}:{}: ", source_file.name, line + 1, col + 1)?;
-
         out.set_color(&severity_spec(diagnostic.severity))?;
         write!(out, "{}", match diagnostic.severity {
             Severity::Error => "error",
@@ -64,6 +61,16 @@ impl Emitter {
 
         out.reset()?;
         writeln!(out, ": {}", diagnostic.message)?;
+
+        let w = (line + 1).to_string().len();
+        out.set_color(&gutter_spec())?;
+        write!(out, "{:>w$} --> ", "", w = w - 1)?;
+        out.reset()?;
+        writeln!(out, "{}:{}:{}", source_file.name, line + 1, col + 1)?;
+
+        out.set_color(&gutter_spec())?;
+        writeln!(out, "{:>w$} |", "", w = w)?;
+        out.reset()?;
 
         out.set_color(&gutter_spec())?;
         write!(out, "{:>w$} |", line + 1, w = w)?;
@@ -88,6 +95,7 @@ impl Emitter {
         out.set_color(&severity_spec(diagnostic.severity))?;
         writeln!(out, "{}", marker)?;
         out.reset()?;
+        writeln!(out, "")?;
 
         Ok(())
     }
