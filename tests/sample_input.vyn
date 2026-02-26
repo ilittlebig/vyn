@@ -2,12 +2,21 @@
 //local a = 5;
 //local b = 0;
 
+local aa: lol = 1
+
+local function c() {
+    local b = 12 + "a"
+}
+
 local a = function() {
+    local b = 12 + "a"
 }
 a();
 
+/*
 local b = 12;
 b();
+*/
 
 /*
 local a: string = "string"

@@ -9,8 +9,8 @@ use crate::frontend::parser::TypeRef;
 use crate::frontend::lexer::Operator;
 
 use crate::diagnostics::{ Span, Diagnostic };
-use crate::passes::{ PassContext, Symbol };
-use crate::passes::hir::{ HirExprKind, HirExpr, HirStmt };
+use crate::passes::{ PassContext, Symbol, DefId };
+use crate::passes::hir::{ HirExprKind, HirExpr, HirStmt, HirBlock, HirParam };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TypeId(pub usize);
@@ -47,6 +47,12 @@ pub enum Type {
     Func { params: Vec<Type>, ret: Box<Type> },
     Any,
     Error,
+}
+
+pub struct FuncInfo<'a> {
+    pub def_id: &'a DefId,
+    pub params: &'a Vec<HirParam>,
+    pub body: &'a HirBlock,
 }
 
 // works for flat types, will need to revisit later

@@ -33,7 +33,7 @@ fn check_stmt(ctx: &mut PassContext, stmt: &HirStmt) {
             if let (Some(ann), Some(inf)) = (annotated, inferred) {
                 // we will get cascading errors here unless we check if either side
                 // was of type error
-                if !types::assignable(&ann, &inf) && inf != Type::Error {
+                if !types::assignable(&ann, &inf) && ann != Type::Error && inf != Type::Error {
                     let span = init.as_ref().map(|e| e.span).unwrap_or(name_span);
                     let msg = format!(
                         "cannot assign ´{}´ to ´{}´",
@@ -43,15 +43,31 @@ fn check_stmt(ctx: &mut PassContext, stmt: &HirStmt) {
                     ctx.diags.push(Diagnostic::error(msg, span));
                 }
             }
+
+            // local x = function(...) { ... }
+            if let Some(HirExprKind::Func(func)) = init.as_ref().map(|e| &e.kind) {
+                for block_stmt in &func.body.stmts {
+                    check_stmt(ctx, &block_stmt);
+                }
+            }
         },
 
         HirStmt::FuncDecl { def_id, params, init } => {
-            ctx.def_types.push(Type::Any);
             ctx.def_types[def_id.0] = Type::Func {
                 params: Vec::new(),
                 ret: Box::new(Type::Any)
             };
+
             // type-check the entire block with the ret type
+            for block_stmt in &init.stmts {
+                check_stmt(ctx, &block_stmt);
+            }
+        },
+
+        HirStmt::Block(block) => {
+            for block_stmt in &block.stmts {
+                check_stmt(ctx, &block_stmt);
+            }
         },
 
         HirStmt::Expr(expr) => {
