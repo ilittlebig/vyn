@@ -124,6 +124,10 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
             }
         },
 
+        HirExprKind::Func { .. } => {
+            Type::Func { params: Vec::new(), ret: Box::new(Type::Any) }
+        },
+
         HirExprKind::Field { base, .. } => {
             let base_ty = type_expr(ctx, &base);
             if base_ty == Type::Error { Type::Error } else { base_ty }
@@ -136,7 +140,10 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
         },
 
         //
-        _ => Type::Error
+        _ => {
+            println!("expr kind not handled: '{:?}'", expr.kind);
+            Type::Error
+        }
     }
 }
 

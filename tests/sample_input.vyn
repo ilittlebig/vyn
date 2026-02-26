@@ -2,12 +2,12 @@
 //local a = 5;
 //local b = 0;
 
-local function a() {
+local a = function() {
 }
 a();
 
-local b = a.b()
-local c = a[1]()
+local b = 12;
+b();
 
 /*
 local a: string = "string"
