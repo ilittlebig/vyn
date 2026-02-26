@@ -36,7 +36,7 @@ fn check_stmt(ctx: &mut PassContext, stmt: &HirStmt) {
                 if !types::assignable(&ann, &inf) && ann != Type::Error && inf != Type::Error {
                     let span = init.as_ref().map(|e| e.span).unwrap_or(name_span);
                     let msg = format!(
-                        "cannot assign ´{}´ to ´{}´",
+                        "cannot assign '{}' to '{}'",
                         types::fmt_type(ctx, &inf),
                         types::fmt_type(ctx, &ann)
                     );
@@ -67,6 +67,18 @@ fn check_stmt(ctx: &mut PassContext, stmt: &HirStmt) {
         HirStmt::Block(block) => {
             for block_stmt in &block.stmts {
                 check_stmt(ctx, &block_stmt);
+            }
+        },
+
+        HirStmt::If { cond, .. } => {
+            let cond_ty = types::type_expr(ctx, cond);
+            if cond_ty != Type::Named(ctx.builtin_types.bool) && cond_ty != Type::Error {
+                let msg = format!(
+                    "expected '{}', got '{}'",
+                    types::fmt_type(ctx, &Type::Named(ctx.builtin_types.bool)),
+                    types::fmt_type(ctx, &cond_ty)
+                );
+                ctx.diags.push(Diagnostic::error(msg, cond.span));
             }
         },
 

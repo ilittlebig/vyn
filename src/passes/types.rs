@@ -63,6 +63,19 @@ pub fn assignable(t1: &Type, t2: &Type) -> bool {
     t1 == t2
 }
 
+fn foo(ctx: &mut PassContext, lhs_ty: &Type, rhs_ty: &Type, op: &Operator, span: Span) {
+    let msg = format!(
+        "invalid operands to binary operator '{}': '{}' and '{}'",
+        Operator::describe(op),
+        fmt_type(ctx, lhs_ty),
+        fmt_type(ctx, rhs_ty)
+    );
+
+    // ideally in the future we should add a note/label to the expressions
+    // explaining what they evaluate to, so it's clearer
+    ctx.diags.push(Diagnostic::error(msg, span));
+}
+
 pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
     match &expr.kind {
         // builtin
@@ -82,21 +95,36 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
             let lhs_ty = type_expr(ctx, &lhs);
             let rhs_ty = type_expr(ctx, &rhs);
 
-            // start by just checking if the types are the same
-            if lhs_ty != rhs_ty {
-                let msg = format!(
-                    "invalid operands to binary operator '{}': '{}' and '{}",
-                    Operator::describe(op),
-                    fmt_type(ctx, &lhs_ty),
-                    fmt_type(ctx, &rhs_ty)
-                );
+            if lhs_ty == Type::Error || rhs_ty == Type::Error {
+                return Type::Error;
+            }
 
-                // ideally in the future we should add a note/label to the expressions
-                // explaining what they evaluate to, so it's clearer
-                ctx.diags.push(Diagnostic::error(msg, expr.span));
-                Type::Error
-            } else {
-                lhs_ty
+            match op {
+                Operator::Equal | Operator::NotEqual => {
+                    if lhs_ty != rhs_ty {
+                        foo(ctx, &lhs_ty, &rhs_ty, op, expr.span);
+                        Type::Error
+                    } else {
+                        Type::Named(ctx.builtin_types.bool)
+                    }
+                },
+                Operator::LessThan |
+                Operator::LessThanEqual |
+                Operator::GreaterThan |
+                Operator::GreaterThanEqual => {
+                    let a = lhs_ty != Type::Named(ctx.builtin_types.int) && lhs_ty != Type::Any;
+                    let b = rhs_ty != Type::Named(ctx.builtin_types.int) && rhs_ty != Type::Any;
+
+                    if a {
+                        foo(ctx, &lhs_ty, &rhs_ty, op, expr.span);
+                        return Type::Error;
+                    } else if b {
+                        foo(ctx, &lhs_ty, &rhs_ty, op, expr.span);
+                        return Type::Error;
+                    }
+                    Type::Named(ctx.builtin_types.bool)
+                },
+                _ => lhs_ty,
             }
         },
 

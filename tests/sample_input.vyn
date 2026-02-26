@@ -2,6 +2,25 @@
 //local a = 5;
 //local b = 0;
 
+if 1 {}
+if 1 + 1 {}
+if "hello" {}
+if nil {}
+
+if 1 == "hello" {}
+if true == 1 {}
+if "a" == 1 {}
+if nil == 1 {}
+
+if 1 < "hello" {}
+if "a" < "b" {}
+if true < false {}
+if nil < 1 {}
+
+if 1 + "hello" {}
+if "a" + "b" {}
+
+/*
 local aa: lol = 1
 
 local function c() {
@@ -12,6 +31,7 @@ local a = function() {
     local b = 12 + "a"
 }
 a();
+*/
 
 /*
 local b = 12;
