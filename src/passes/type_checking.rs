@@ -72,7 +72,10 @@ fn check_stmt(ctx: &mut PassContext, stmt: &HirStmt) {
 
         HirStmt::If { cond, .. } => {
             let cond_ty = types::type_expr(ctx, cond);
-            if cond_ty != Type::Named(ctx.builtin_types.bool) && cond_ty != Type::Error {
+            let is_bool = cond_ty == Type::Named(ctx.builtin_types.bool);
+            let is_ok = is_bool || cond_ty == Type::Error || cond_ty == Type::Any;
+
+            if !is_ok {
                 let msg = format!(
                     "expected '{}', got '{}'",
                     types::fmt_type(ctx, &Type::Named(ctx.builtin_types.bool)),

@@ -85,8 +85,7 @@ impl PassContext {
         let int = ctx.push_builtin_type("int");
         let bool = ctx.push_builtin_type("bool");
         let nil = ctx.push_builtin_type("nil");
-        let any = ctx.push_builtin_type("any");
-        ctx.builtin_types = BuiltinTypes { string, int, bool, nil, any };
+        ctx.builtin_types = BuiltinTypes { string, int, bool, nil };
 
         // global scope
         ctx.scopes.push(Scope { parent: None, bindings: HashMap::new() });

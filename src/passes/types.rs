@@ -20,13 +20,12 @@ pub struct BuiltinTypes {
     pub int: TypeId,
     pub bool: TypeId,
     pub nil: TypeId,
-    pub any: TypeId,
 }
 
 impl BuiltinTypes {
     pub fn dummy() -> Self {
         let z = TypeId(0);
-        BuiltinTypes { string: z, int: z, bool: z, nil: z, any: z }
+        BuiltinTypes { string: z, int: z, bool: z, nil: z }
     }
 }
 
@@ -101,7 +100,7 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
 
             match op {
                 Operator::Equal | Operator::NotEqual => {
-                    if lhs_ty != rhs_ty {
+                    if lhs_ty != rhs_ty && lhs_ty != Type::Any && rhs_ty != Type::Any {
                         emit_binop_type_error(ctx, &lhs_ty, &rhs_ty, op, expr.span);
                         Type::Error
                     } else {
@@ -183,6 +182,10 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
 pub fn lower_type_ref(ctx: &mut PassContext, type_ref: &TypeRef) -> (Type, Span) {
     match type_ref {
         TypeRef::Named(name, span) => {
+            if name == "any" {
+                return (Type::Any, *span);
+            }
+
             let symbol = ctx.interner.intern(name);
             let type_id = ctx.type_bindings.get(&symbol);
 
