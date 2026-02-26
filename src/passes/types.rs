@@ -115,10 +115,7 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
                     let a = lhs_ty != Type::Named(ctx.builtin_types.int) && lhs_ty != Type::Any;
                     let b = rhs_ty != Type::Named(ctx.builtin_types.int) && rhs_ty != Type::Any;
 
-                    if a {
-                        emit_binop_type_error(ctx, &lhs_ty, &rhs_ty, op, expr.span);
-                        return Type::Error;
-                    } else if b {
+                    if a || b {
                         emit_binop_type_error(ctx, &lhs_ty, &rhs_ty, op, expr.span);
                         return Type::Error;
                     }
