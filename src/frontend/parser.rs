@@ -417,16 +417,23 @@ impl Parser {
 
     fn parse_expr_bp(&mut self, min_bp: u8) -> Result<ExprSpanned, ParseError> {
         let mut lhs = self.parse_primary()?;
-        while self.peek_is(&TokenKind::LParen) {
-            lhs = self.parse_call(lhs)?;
-        }
 
-        while self.peek_is(&TokenKind::Dot) {
-            lhs = self.parse_field(lhs)?;
-        }
+        loop {
+            if self.peek_is(&TokenKind::LParen) {
+                lhs = self.parse_call(lhs)?;
+                continue;
+            }
 
-        while self.peek_is(&TokenKind::LBracket) {
-            lhs = self.parse_index(lhs)?;
+            if self.peek_is(&TokenKind::Dot) {
+                lhs = self.parse_field(lhs)?;
+                continue;
+            }
+
+            if self.peek_is(&TokenKind::LBracket) {
+                lhs = self.parse_index(lhs)?;
+                continue;
+            }
+            break;
         }
 
         while let Some(token) = self.peek() {

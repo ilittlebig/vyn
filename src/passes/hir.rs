@@ -58,7 +58,7 @@ pub struct HirBlock {
 #[derive(Debug)]
 pub enum HirStmt {
     Decl { def_id: DefId, init: Option<HirExpr> },
-    FuncDecl { name: Symbol, params: Vec<HirParam>, init: HirBlock },
+    FuncDecl { def_id: DefId, params: Vec<HirParam>, init: HirBlock },
 
     While { cond: HirExpr, body: HirBlock },
     If { cond: HirExpr, then_block: HirBlock, else_block: Option<HirBlock> },

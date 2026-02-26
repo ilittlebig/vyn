@@ -2,9 +2,18 @@
 //local a = 5;
 //local b = 0;
 
+local function a() {
+}
+a();
+
+local b = a.b()
+local c = a[1]()
+
+/*
 local a: string = "string"
 local b: int = 123 + a
 local c: int = true;
+*/
 
 /*
 local function a(a) {}

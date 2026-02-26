@@ -124,7 +124,7 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
             }
         },
 
-        Expr::Call { callee, args, .. } => {
+        Expr::Call { callee, args } => {
             let callee_expr = traverse_expr(ctx, callee);
             let mut new_args = Vec::new();
 
@@ -221,7 +221,7 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
 
             // here we declare var before traversing, to allow for function
             // recursion inside local function a() { a() }
-            declare_var(ctx, symbol, *name_span, DefKind::Function);
+            let def_id = declare_var(ctx, symbol, *name_span, DefKind::Function);
 
             let (block, params) = lower_function_scoped(
                 ctx,
@@ -229,7 +229,7 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
                 &init.body,
                 &init.params
             );
-            HirStmt::FuncDecl { name: symbol, params, init: block }
+            HirStmt::FuncDecl { def_id, params, init: block }
         },
 
         Stmt::While { cond, body, .. } => {

@@ -41,15 +41,19 @@ pub struct TypeDef {
     pub kind: TypeDefKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Named(TypeId),
+    Func { params: Vec<Type>, ret: Box<Type> },
     Any,
     Error,
 }
 
-pub fn assignable(t1: Type, t2: Type) -> bool {
-    // if t1 or t2 is any, allow it
+// works for flat types, will need to revisit later
+pub fn assignable(t1: &Type, t2: &Type) -> bool {
+    if *t1 == Type::Any || *t2 == Type::Any {
+        return true;
+    }
     t1 == t2
 }
 
@@ -63,7 +67,9 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
 
         //
         HirExprKind::VarRef { def: def_id } => {
-            ctx.def_types[def_id.0]
+            // should use something like ret: Rc<Type> so cloning is cheap, or
+            // make this entire function return a reference, but that's for the future
+            ctx.def_types[def_id.0].clone()
         },
 
         HirExprKind::Binary { lhs, rhs, op } => {
@@ -92,7 +98,7 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
             let t1 = type_expr(ctx, &target);
             let t2 = type_expr(ctx, &value);
 
-            if !assignable(t1, t2) {
+            if !assignable(&t1, &t2) {
                 let msg = format!(
                     "cannot assign '{}' to '{}'",
                     fmt_type(ctx, &t1),
@@ -103,6 +109,33 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
             t1
         },
 
+        HirExprKind::Call { callee, args, .. } => {
+            let ty = type_expr(ctx, &callee);
+            match ty {
+                Type::Func { .. } => ty,
+                _ => {
+                    let msg = format!(
+                        "attempted to call a non-function value (type: '{}')",
+                        fmt_type(ctx, &ty),
+                    );
+                    ctx.diags.push(Diagnostic::error(msg, expr.span));
+                    ty
+                },
+            }
+        },
+
+        HirExprKind::Field { base, .. } => {
+            let base_ty = type_expr(ctx, &base);
+            if base_ty == Type::Error { Type::Error } else { base_ty }
+        },
+
+        HirExprKind::Index { base, index } => {
+            let base_ty = type_expr(ctx, &base);
+            let index_ty = type_expr(ctx, &index);
+            if base_ty == Type::Error || index_ty == Type::Error { Type::Error } else { base_ty }
+        },
+
+        //
         _ => Type::Error
     }
 }
@@ -126,6 +159,7 @@ pub fn lower_type_ref(ctx: &mut PassContext, type_ref: &TypeRef) -> (Type, Span)
 
 pub fn fmt_type(ctx: &mut PassContext, ty: &Type) -> String {
     match ty {
+        Type::Func { .. } => "fn(...) -> ...".to_string(),
         Type::Any => "any".to_string(),
         Type::Error => "<error>".to_string(),
         Type::Named(id) => {
