@@ -63,7 +63,7 @@ pub fn assignable(t1: &Type, t2: &Type) -> bool {
     t1 == t2
 }
 
-fn foo(ctx: &mut PassContext, lhs_ty: &Type, rhs_ty: &Type, op: &Operator, span: Span) {
+fn emit_binop_type_error(ctx: &mut PassContext, lhs_ty: &Type, rhs_ty: &Type, op: &Operator, span: Span) {
     let msg = format!(
         "invalid operands to binary operator '{}': '{}' and '{}'",
         Operator::describe(op),
@@ -102,7 +102,7 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
             match op {
                 Operator::Equal | Operator::NotEqual => {
                     if lhs_ty != rhs_ty {
-                        foo(ctx, &lhs_ty, &rhs_ty, op, expr.span);
+                        emit_binop_type_error(ctx, &lhs_ty, &rhs_ty, op, expr.span);
                         Type::Error
                     } else {
                         Type::Named(ctx.builtin_types.bool)
@@ -116,10 +116,10 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
                     let b = rhs_ty != Type::Named(ctx.builtin_types.int) && rhs_ty != Type::Any;
 
                     if a {
-                        foo(ctx, &lhs_ty, &rhs_ty, op, expr.span);
+                        emit_binop_type_error(ctx, &lhs_ty, &rhs_ty, op, expr.span);
                         return Type::Error;
                     } else if b {
-                        foo(ctx, &lhs_ty, &rhs_ty, op, expr.span);
+                        emit_binop_type_error(ctx, &lhs_ty, &rhs_ty, op, expr.span);
                         return Type::Error;
                     }
                     Type::Named(ctx.builtin_types.bool)
