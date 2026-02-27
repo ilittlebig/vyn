@@ -22,8 +22,10 @@ if 1 + "hello" {}
 if "a" + "b" {}
 */
 
-local a: double = 1.23
-if 1 == a {}
+local function a() {
+    return;
+}
+return;
 
 /*
 local aa: lol = 1

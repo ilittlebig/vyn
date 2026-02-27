@@ -57,7 +57,7 @@ pub struct HirBlock {
 }
 
 #[derive(Debug)]
-pub enum HirStmt {
+pub enum HirStmtKind {
     Decl { def_id: DefId, init: Option<HirExpr> },
     FuncDecl { def_id: DefId, params: Vec<HirParam>, init: HirBlock },
 
@@ -70,4 +70,10 @@ pub enum HirStmt {
 
     Block(HirBlock),
     Expr(HirExpr),
+}
+
+#[derive(Debug)]
+pub struct HirStmt {
+    pub kind: HirStmtKind,
+    pub span: Span,
 }

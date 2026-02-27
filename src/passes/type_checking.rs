@@ -10,11 +10,37 @@ use crate::passes::types::Type;
 
 use crate::passes::PassContext;
 use crate::diagnostics::Diagnostic;
-use crate::passes::hir::{ HirStmt, HirExpr, HirExprKind };
+use crate::passes::hir::{ HirStmt, HirStmtKind, HirExpr, HirBlock, HirExprKind };
 
-fn check_stmt(ctx: &mut PassContext, stmt: &HirStmt) {
-    match stmt {
-        HirStmt::Decl { def_id, init } => {
+struct ContextStack {
+    is_function: bool,
+    loop_depth: usize,
+}
+
+fn expect_cond(ctx: &mut PassContext, cond: &HirExpr) {
+    let cond_ty = types::type_expr(ctx, cond);
+    let is_bool = cond_ty == Type::Named(ctx.builtin_types.bool);
+    let is_ok = is_bool || cond_ty == Type::Error || cond_ty == Type::Any;
+
+    if !is_ok {
+        let msg = format!(
+            "expected '{}', got '{}'",
+            types::fmt_type(ctx, &Type::Named(ctx.builtin_types.bool)),
+            types::fmt_type(ctx, &cond_ty)
+        );
+        ctx.diags.push(Diagnostic::error(msg, cond.span));
+    }
+}
+
+fn check_block(ctx: &mut PassContext, ctx_stack: &mut ContextStack, block: &HirBlock) {
+    for block_stmt in &block.stmts {
+        check_stmt(ctx, ctx_stack, &block_stmt);
+    }
+}
+
+fn check_stmt(ctx: &mut PassContext, ctx_stack: &mut ContextStack, stmt: &HirStmt) {
+    match &stmt.kind {
+        HirStmtKind::Decl { def_id, init } => {
             let name_span = ctx.defs[def_id.0].span;
             let ann = ctx.def_ann[def_id.0].clone();
 
@@ -46,55 +72,58 @@ fn check_stmt(ctx: &mut PassContext, stmt: &HirStmt) {
 
             // local x = function(...) { ... }
             if let Some(HirExprKind::Func(func)) = init.as_ref().map(|e| &e.kind) {
-                for block_stmt in &func.body.stmts {
-                    check_stmt(ctx, &block_stmt);
-                }
+                ctx_stack.is_function = true;
+                check_block(ctx, ctx_stack, &func.body);
+                ctx_stack.is_function = false;
             }
         },
 
-        HirStmt::FuncDecl { def_id, params, init } => {
+        HirStmtKind::FuncDecl { def_id, params, init } => {
             ctx.def_types[def_id.0] = Type::Func {
                 params: Vec::new(),
                 ret: Box::new(Type::Any)
             };
 
-            // type-check the entire block with the ret type
-            for block_stmt in &init.stmts {
-                check_stmt(ctx, &block_stmt);
+            ctx_stack.is_function = true;
+            check_block(ctx, ctx_stack, &init);
+            ctx_stack.is_function = false;
+        },
+
+        HirStmtKind::If { cond, then_block, else_block } => {
+            expect_cond(ctx, &cond);
+            check_block(ctx, ctx_stack, &then_block);
+            if let Some(else_block) = else_block {
+                check_block(ctx, ctx_stack, &else_block);
+            }
+        }
+
+        HirStmtKind::While { cond, body } => {
+            expect_cond(ctx, &cond);
+            ctx_stack.loop_depth += 1;
+            check_block(ctx, ctx_stack, &body);
+            ctx_stack.loop_depth -= 1;
+        },
+
+        HirStmtKind::Return(expr) => {
+            if !ctx_stack.is_function {
+                let msg = "cannot return outside function declaration";
+                ctx.diags.push(Diagnostic::error(msg, stmt.span));
             }
         },
 
-        HirStmt::Block(block) => {
-            for block_stmt in &block.stmts {
-                check_stmt(ctx, &block_stmt);
-            }
-        },
-
-        HirStmt::If { cond, .. } => {
-            let cond_ty = types::type_expr(ctx, cond);
-            let is_bool = cond_ty == Type::Named(ctx.builtin_types.bool);
-            let is_ok = is_bool || cond_ty == Type::Error || cond_ty == Type::Any;
-
-            if !is_ok {
-                let msg = format!(
-                    "expected '{}', got '{}'",
-                    types::fmt_type(ctx, &Type::Named(ctx.builtin_types.bool)),
-                    types::fmt_type(ctx, &cond_ty)
-                );
-                ctx.diags.push(Diagnostic::error(msg, cond.span));
-            }
-        },
-
-        HirStmt::Expr(expr) => {
-            let expr_ty = types::type_expr(ctx, expr);
-        },
-
+        HirStmtKind::Expr(expr) => { types::type_expr(ctx, &expr); },
+        HirStmtKind::Block(block) => check_block(ctx, ctx_stack, &block),
         _ => {},
     }
 }
 
 pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) {
+    let mut ctx_stack = ContextStack {
+        is_function: false,
+        loop_depth: 0,
+    };
+
     for stmt in hir {
-        check_stmt(ctx, stmt);
+        check_stmt(ctx, &mut ctx_stack, stmt);
     }
 }

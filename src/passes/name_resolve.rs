@@ -6,10 +6,10 @@
  **/
 
 use crate::passes::types::Type;
-use crate::frontend::parser::{ Stmt, Expr, Block };
+use crate::frontend::parser::{ Stmt, StmtKind, Expr, Block };
 use crate::diagnostics::{ Span, Spanned, Diagnostic };
 use crate::passes::{ PassContext, Symbol, Def, DefId, DefKind };
-use crate::passes::hir::{ HirExprKind, HirExpr, HirParam, HirFunc, HirBlock, HirStmt };
+use crate::passes::hir::{ HirExprKind, HirExpr, HirParam, HirFunc, HirBlock, HirStmt, HirStmtKind };
 
 fn lookup_var(ctx: &PassContext, symbol: Symbol) -> Option<DefId> {
     let mut current_scope = ctx.current_scope;
@@ -206,8 +206,8 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
 }
 
 fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
-    match stmt {
-        Stmt::Decl { name: (name, name_span), init, ty } => {
+    match &stmt.kind {
+        StmtKind::Decl { name: (name, name_span), init, ty } => {
             let symbol = ctx.interner.intern(name);
             let init = init.as_ref().map(|e| traverse_expr(ctx, e));
 
@@ -215,12 +215,16 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
             // isn't valid if it's referencing itself
             let def_id = declare_var(ctx, symbol, *name_span, DefKind::LocalVar);
             ctx.def_ann[def_id.0] = ty.clone();
-            HirStmt::Decl { def_id, init }
+
+            HirStmt {
+                kind: HirStmtKind::Decl { def_id, init },
+                span: Span { start: 0, end: 0 },
+            }
         },
 
         // we may need to separate these in the future, but right now they are the exact same
-        Stmt::FuncDecl { name: (name, name_span), init } |
-        Stmt::LocalFuncDecl { name: (name, name_span), init } => {
+        StmtKind::FuncDecl { name: (name, name_span), init } |
+        StmtKind::LocalFuncDecl { name: (name, name_span), init } => {
             let symbol = ctx.interner.intern(name);
 
             // here we declare var before traversing, to allow for function
@@ -233,35 +237,60 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
                 &init.body,
                 &init.params
             );
-            HirStmt::FuncDecl { def_id, params, init: block }
+
+            HirStmt {
+                kind: HirStmtKind::FuncDecl { def_id, params, init: block },
+                span: Span { start: 0, end: 0 },
+            }
         },
 
-        Stmt::While { cond, body, .. } => {
+        StmtKind::While { cond, body, .. } => {
             let expr = traverse_expr(ctx, cond);
             let block = traverse_block_scoped(ctx, body);
-            HirStmt::While { cond: expr, body: block }
+            HirStmt {
+                kind: HirStmtKind::While { cond: expr, body: block },
+                span: Span { start: 0, end: 0 },
+            }
         },
-        Stmt::If { cond, then_block, else_block } => {
+        StmtKind::If { cond, then_block, else_block } => {
             let expr = traverse_expr(ctx, cond);
             let then_block = traverse_block_scoped(ctx, then_block);
             let else_block = else_block.as_ref().map(|b| traverse_block_scoped(ctx, b));
-            HirStmt::If { cond: expr, then_block, else_block }
+            HirStmt {
+                kind: HirStmtKind::If { cond: expr, then_block, else_block },
+                span: Span { start: 0, end: 0 },
+            }
         },
-        Stmt::Return(expr) => {
+        StmtKind::Return(expr) => {
             let expr = expr.as_ref().map(|e| traverse_expr(ctx, e));
-            HirStmt::Return(expr)
+            HirStmt {
+                kind: HirStmtKind::Return(expr),
+                span: stmt.span,
+            }
         },
-        Stmt::Block(block) => {
+        StmtKind::Block(block) => {
             let block = traverse_block_scoped(ctx, block);
-            HirStmt::Block(block)
+            HirStmt {
+                kind: HirStmtKind::Block(block),
+                span: Span { start: 0, end: 0 },
+            }
         },
-        Stmt::ExprStmt(expr) => {
+        StmtKind::ExprStmt(expr) => {
             let expr = traverse_expr(ctx, expr);
-            HirStmt::Expr(expr)
+            HirStmt {
+                kind: HirStmtKind::Expr(expr),
+                span: Span { start: 0, end: 0 },
+            }
         },
 
-        Stmt::Break => HirStmt::Break,
-        Stmt::Continue => HirStmt::Continue,
+        StmtKind::Break => HirStmt {
+            kind: HirStmtKind::Break,
+            span: Span { start: 0, end: 0 },
+        },
+        StmtKind::Continue => HirStmt {
+            kind: HirStmtKind::Continue,
+            span: Span { start: 0, end: 0 },
+        },
     }
 }
 

@@ -92,7 +92,7 @@ pub enum Expr {
 }
 
 #[derive(Debug, Clone)]
-pub enum Stmt {
+pub enum StmtKind {
     Decl { name: (String, Span), ty: Option<TypeRef>, init: Option<ExprSpanned> },
     FuncDecl { name: (String, Span), init: Func },
     LocalFuncDecl { name: (String, Span), init: Func },
@@ -105,6 +105,12 @@ pub enum Stmt {
 
     Block(Block),
     ExprStmt(ExprSpanned),
+}
+
+#[derive(Debug, Clone)]
+pub struct Stmt {
+    pub kind: StmtKind,
+    pub span: Span,
 }
 
 #[derive(Debug)]
@@ -504,7 +510,11 @@ impl Parser {
                 span: expr.span
             });
         }
-        Ok(Stmt::ExprStmt(expr))
+
+        Ok(Stmt {
+            kind: StmtKind::ExprStmt(expr),
+            span: Span { start: 0, end: 0 },
+        })
     }
 
     /*
@@ -532,9 +542,12 @@ impl Parser {
             self.expect_closing(TokenKind::RParen, lparen.span)?;
 
             let body = self.parse_block()?;
-            Ok(Stmt::LocalFuncDecl {
-                name: (name, name_span),
-                init: Func { body: Box::new(body), params }
+            Ok(Stmt {
+                kind: StmtKind::LocalFuncDecl {
+                    name: (name, name_span),
+                    init: Func { body: Box::new(body), params }
+                },
+                span: Span { start: 0, end: 0 },
             })
         } else {
             let (name, name_span) = self.expect_ident()?;
@@ -569,7 +582,11 @@ impl Parser {
                     });
                 }
             }
-            Ok(Stmt::Decl { name: (name, name_span), ty, init })
+
+            Ok(Stmt {
+                kind: StmtKind::Decl { name: (name, name_span), ty, init },
+                span: Span { start: 0, end: 0 },
+            })
         }
     }
 
@@ -582,9 +599,12 @@ impl Parser {
         self.expect_closing(TokenKind::RParen, lparen.span)?;
 
         let body = self.parse_block()?;
-        Ok(Stmt::FuncDecl {
-            name: (name, name_span),
-            init: Func { body: Box::new(body), params }
+        Ok(Stmt {
+            kind: StmtKind::FuncDecl {
+                name: (name, name_span),
+                init: Func { body: Box::new(body), params }
+            },
+            span: Span { start: 0, end: 0 },
         })
     }
 
@@ -606,7 +626,10 @@ impl Parser {
 
     fn parse_block_stmt(&mut self) -> Result<Stmt, ParseError> {
         let body = self.parse_block()?;
-        Ok(Stmt::Block(body))
+        Ok(Stmt {
+            kind: StmtKind::Block(body),
+            span: Span { start: 0, end: 0 },
+        })
     }
 
     fn parse_if_stmt(&mut self) -> Result<Stmt, ParseError> {
@@ -619,39 +642,58 @@ impl Parser {
         } else {
             None
         };
-        Ok(Stmt::If { cond, then_block, else_block })
+
+        Ok(Stmt {
+            kind: StmtKind::If { cond, then_block, else_block },
+            span: Span { start: 0, end: 0 },
+        })
     }
 
     fn parse_while_stmt(&mut self) -> Result<Stmt, ParseError> {
         self.expect(Expected::Keyword(Keyword::While))?;
         let cond = self.parse_expr()?;
         let body = self.parse_block()?;
-        Ok(Stmt::While { cond, body })
+
+        Ok(Stmt {
+            kind: StmtKind::While { cond, body },
+            span: Span { start: 0, end: 0 },
+        })
     }
 
     fn parse_return_stmt(&mut self) -> Result<Stmt, ParseError> {
-        self.expect(Expected::Keyword(Keyword::Return))?;
-        let stmt = if self.peek_is(&TokenKind::Semicolon) || self.peek_is(&TokenKind::RBrace) {
-            Stmt::Return(None)
+        let ret_token = self.expect(Expected::Keyword(Keyword::Return))?;
+        let (kind, expr_span) = if self.peek_is(&TokenKind::Semicolon) || self.peek_is(&TokenKind::RBrace) {
+            (StmtKind::Return(None), None)
         } else {
             let expr = self.parse_expr()?;
-            Stmt::Return(Some(expr))
+            let expr_span = expr.span;
+            (StmtKind::Return(Some(expr)), Some(expr_span))
         };
 
-        self.consume_if(Expected::Token(TokenKind::Semicolon));
-        Ok(stmt)
+        let semicolon = self.consume_if(Expected::Token(TokenKind::Semicolon));
+        let semicolon_span = semicolon.as_ref().map(|t| t.span);
+
+        let start_span = ret_token.span;
+        let end_span = semicolon_span.or(expr_span).unwrap_or(ret_token.span);
+        Ok(Stmt { kind, span: start_span.join(end_span) })
     }
 
     fn parse_break_stmt(&mut self) -> Result<Stmt, ParseError> {
         self.expect(Expected::Keyword(Keyword::Break))?;
         self.consume_if(Expected::Token(TokenKind::Semicolon));
-        Ok(Stmt::Break)
+        Ok(Stmt {
+            kind: StmtKind::Break,
+            span: Span { start: 0, end: 0 },
+        })
     }
 
     fn parse_continue_stmt(&mut self) -> Result<Stmt, ParseError> {
         self.expect(Expected::Keyword(Keyword::Continue))?;
         self.consume_if(Expected::Token(TokenKind::Semicolon));
-        Ok(Stmt::Continue)
+        Ok(Stmt {
+            kind: StmtKind::Continue,
+            span: Span { start: 0, end: 0 },
+        })
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
