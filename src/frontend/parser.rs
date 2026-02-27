@@ -678,22 +678,24 @@ impl Parser {
         Ok(Stmt { kind, span: start_span.join(end_span) })
     }
 
+    fn parse_keyword_stmt_span(&mut self, expected: Expected) -> Result<Span, ParseError> {
+        let token = self.expect(Expected::Keyword(Keyword::Break))?;
+        let semicolon = self.consume_if(Expected::Token(TokenKind::Semicolon));
+        let semicolon_span = semicolon.as_ref().map(|t| t.span);
+
+        let start_span = token.span;
+        let end_span = semicolon_span.unwrap_or(token.span);
+        Ok(start_span.join(end_span))
+    }
+
     fn parse_break_stmt(&mut self) -> Result<Stmt, ParseError> {
-        self.expect(Expected::Keyword(Keyword::Break))?;
-        self.consume_if(Expected::Token(TokenKind::Semicolon));
-        Ok(Stmt {
-            kind: StmtKind::Break,
-            span: Span { start: 0, end: 0 },
-        })
+        let span = self.parse_keyword_stmt_span(Expected::Keyword(Keyword::Break))?;
+        Ok(Stmt { kind: StmtKind::Break, span })
     }
 
     fn parse_continue_stmt(&mut self) -> Result<Stmt, ParseError> {
-        self.expect(Expected::Keyword(Keyword::Continue))?;
-        self.consume_if(Expected::Token(TokenKind::Semicolon));
-        Ok(Stmt {
-            kind: StmtKind::Continue,
-            span: Span { start: 0, end: 0 },
-        })
+        let span = self.parse_keyword_stmt_span(Expected::Keyword(Keyword::Continue))?;
+        Ok(Stmt { kind: StmtKind::Continue, span })
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
