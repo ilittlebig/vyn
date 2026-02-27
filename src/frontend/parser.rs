@@ -501,7 +501,13 @@ impl Parser {
     fn parse_expr_stmt(&mut self) -> Result<Stmt, ParseError> {
         let found_kind = self.peek().map(|t| t.kind.clone()).unwrap_or(TokenKind::Eof);
         let expr = self.parse_expr()?;
-        self.consume_if(Expected::Token(TokenKind::Semicolon));
+
+        let semicolon = self.consume_if(Expected::Token(TokenKind::Semicolon));
+        let span = if let Some(semi) = semicolon {
+            expr.span.join(semi.span)
+        } else {
+            expr.span
+        };
 
         if !self.is_valid_expr_stmt(&expr.node) {
             return Err(ParseError {
@@ -513,7 +519,7 @@ impl Parser {
 
         Ok(Stmt {
             kind: StmtKind::ExprStmt(expr),
-            span: Span { start: 0, end: 0 },
+            span
         })
     }
 
@@ -531,7 +537,8 @@ impl Parser {
      *     "{" stmt* "}" ;
      */
     fn parse_decl_stmt(&mut self) -> Result<Stmt, ParseError> {
-        self.expect(Expected::Keyword(Keyword::Local))?;
+        let local_token = self.expect(Expected::Keyword(Keyword::Local))?;
+        let start_span = local_token.span;
 
         if self.peek_is(&TokenKind::Keyword(Keyword::Function)) {
             self.expect(Expected::Keyword(Keyword::Function))?;
@@ -542,12 +549,14 @@ impl Parser {
             self.expect_closing(TokenKind::RParen, lparen.span)?;
 
             let body = self.parse_block()?;
+            let end_span = body.span;
+
             Ok(Stmt {
                 kind: StmtKind::LocalFuncDecl {
                     name: (name, name_span),
                     init: Func { body: Box::new(body), params }
                 },
-                span: Span { start: 0, end: 0 },
+                span: start_span.join(end_span),
             })
         } else {
             let (name, name_span) = self.expect_ident()?;
@@ -565,7 +574,8 @@ impl Parser {
             };
 
             let last_stmt_end = self.tokens[self.pos.saturating_sub(1)].span.end;
-            if self.consume_if(Expected::Token(TokenKind::Semicolon)).is_some() {
+            let semicolon = self.consume_if(Expected::Token(TokenKind::Semicolon));
+            if semicolon.is_some() {
                 // ok
             } else if matches!(self.peek().map(|t| &t.kind), Some(TokenKind::Eof) | Some(TokenKind::RBrace)) {
                 // ok
@@ -583,15 +593,29 @@ impl Parser {
                 }
             }
 
+            let base_end = if let Some(init) = &init {
+                init.span
+            } else if let Some(TypeRef::Named(_, type_span)) = &ty {
+                *type_span
+            } else {
+                name_span
+            };
+
+            let end_span = if let Some(semi_tok) = semicolon {
+                base_end.join(semi_tok.span)
+            } else {
+                base_end
+            };
+
             Ok(Stmt {
                 kind: StmtKind::Decl { name: (name, name_span), ty, init },
-                span: Span { start: 0, end: 0 },
+                span: start_span.join(end_span),
             })
         }
     }
 
     fn parse_func_decl_stmt(&mut self) -> Result<Stmt, ParseError> {
-        self.expect(Expected::Keyword(Keyword::Function))?;
+        let fn_token = self.expect(Expected::Keyword(Keyword::Function))?;
         let (name, name_span) = self.expect_ident()?;
 
         let lparen = self.expect(Expected::Token(TokenKind::LParen))?;
@@ -599,12 +623,15 @@ impl Parser {
         self.expect_closing(TokenKind::RParen, lparen.span)?;
 
         let body = self.parse_block()?;
+        let start_span = fn_token.span;
+        let end_span = body.span;
+
         Ok(Stmt {
             kind: StmtKind::FuncDecl {
                 name: (name, name_span),
                 init: Func { body: Box::new(body), params }
             },
-            span: Span { start: 0, end: 0 },
+            span: start_span.join(end_span),
         })
     }
 
@@ -626,14 +653,15 @@ impl Parser {
 
     fn parse_block_stmt(&mut self) -> Result<Stmt, ParseError> {
         let body = self.parse_block()?;
+        let span = body.span;
         Ok(Stmt {
             kind: StmtKind::Block(body),
-            span: Span { start: 0, end: 0 },
+            span,
         })
     }
 
     fn parse_if_stmt(&mut self) -> Result<Stmt, ParseError> {
-        self.expect(Expected::Keyword(Keyword::If))?;
+        let if_token = self.expect(Expected::Keyword(Keyword::If))?;
         let cond = self.parse_expr()?;
         let then_block = self.parse_block()?;
 
@@ -643,20 +671,28 @@ impl Parser {
             None
         };
 
+        let start_span = if_token.span;
+        let then_span = then_block.span;
+        let else_span = else_block.as_ref().map(|b| b.span);
+        let end_span = else_span.unwrap_or(then_span);
+
         Ok(Stmt {
             kind: StmtKind::If { cond, then_block, else_block },
-            span: Span { start: 0, end: 0 },
+            span: start_span.join(end_span),
         })
     }
 
     fn parse_while_stmt(&mut self) -> Result<Stmt, ParseError> {
-        self.expect(Expected::Keyword(Keyword::While))?;
+        let while_token = self.expect(Expected::Keyword(Keyword::While))?;
         let cond = self.parse_expr()?;
         let body = self.parse_block()?;
 
+        let start_span = while_token.span;
+        let end_span = body.span;
+
         Ok(Stmt {
             kind: StmtKind::While { cond, body },
-            span: Span { start: 0, end: 0 },
+            span: start_span.join(end_span),
         })
     }
 
