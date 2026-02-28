@@ -696,9 +696,15 @@ impl Parser {
         })
     }
 
+    fn is_terminator_of_return_expr(&self) -> bool {
+        self.peek_is(&TokenKind::Semicolon) ||
+        self.peek_is(&TokenKind::RBrace) ||
+        self.peek_is(&TokenKind::Eof)
+    }
+
     fn parse_return_stmt(&mut self) -> Result<Stmt, ParseError> {
         let ret_token = self.expect(Expected::Keyword(Keyword::Return))?;
-        let (kind, expr_span) = if self.peek_is(&TokenKind::Semicolon) || self.peek_is(&TokenKind::RBrace) {
+        let (kind, expr_span) = if self.is_terminator_of_return_expr() {
             (StmtKind::Return(None), None)
         } else {
             let expr = self.parse_expr()?;

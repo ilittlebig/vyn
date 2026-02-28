@@ -22,10 +22,7 @@ if 1 + "hello" {}
 if "a" + "b" {}
 */
 
-local function a() {
-    return;
-}
-return;
+return
 
 /*
 local aa: lol = 1
