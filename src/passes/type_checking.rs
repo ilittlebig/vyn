@@ -13,8 +13,9 @@ use crate::diagnostics::Diagnostic;
 use crate::passes::hir::{ HirStmt, HirStmtKind, HirExpr, HirBlock, HirExprKind };
 
 struct ContextStack {
-    is_function: bool,
+    function_depth: usize,
     loop_depth: usize,
+    expected_return: Option<Type>,
 }
 
 fn expect_cond(ctx: &mut PassContext, cond: &HirExpr) {
@@ -36,6 +37,24 @@ fn check_block(ctx: &mut PassContext, ctx_stack: &mut ContextStack, block: &HirB
     for block_stmt in &block.stmts {
         check_stmt(ctx, ctx_stack, &block_stmt);
     }
+}
+
+fn stmt_def_returns(stmt: &HirStmt) -> bool {
+    match &stmt.kind {
+        HirStmtKind::Return(_) => true,
+        HirStmtKind::Block(b) => block_def_returns(b),
+        HirStmtKind::If { then_block, else_block, .. } =>
+            block_def_returns(then_block) &&
+            else_block.as_ref().map(block_def_returns).unwrap_or(false),
+        _ => false,
+    }
+}
+
+fn block_def_returns(block: &HirBlock) -> bool {
+    for stmt in &block.stmts {
+        if stmt_def_returns(&stmt) { return true; }
+    }
+    false
 }
 
 fn check_stmt(ctx: &mut PassContext, ctx_stack: &mut ContextStack, stmt: &HirStmt) {
@@ -72,21 +91,49 @@ fn check_stmt(ctx: &mut PassContext, ctx_stack: &mut ContextStack, stmt: &HirStm
 
             // local x = function(...) { ... }
             if let Some(HirExprKind::Func(func)) = init.as_ref().map(|e| &e.kind) {
-                ctx_stack.is_function = true;
+                ctx_stack.function_depth += 1;
                 check_block(ctx, ctx_stack, &func.body);
-                ctx_stack.is_function = false;
+                ctx_stack.function_depth -= 1;
             }
         },
 
-        HirStmtKind::FuncDecl { def_id, params, init } => {
+        HirStmtKind::FuncDecl { def_id, params, init, ret } => {
+            if let Some((ret_type, ret_span)) = &ret {
+                if matches!(ret_type, Type::Error) {
+                    ctx.diags.push(Diagnostic::error("unknown type name", *ret_span));
+                }
+
+                ctx_stack.expected_return = Some(ret_type.clone());
+
+                if !block_def_returns(&init) {
+                    let msg = format!(
+                        "not all paths return a value of type '{}'",
+                        types::fmt_type(ctx, &ret_type)
+                    );
+                    ctx.diags.push(Diagnostic::error(msg, *ret_span));
+                }
+            }
+
+
+            let mut new_params = Vec::new();
+            for param in params {
+                let def_id = param.def_id;
+                let ty = ctx.def_types[def_id.0].clone();
+
+                if matches!(ty, Type::Error) {
+                    ctx.diags.push(Diagnostic::error("unknown type for parameter", param.span));
+                }
+                new_params.push(ty);
+            }
+
             ctx.def_types[def_id.0] = Type::Func {
-                params: Vec::new(),
+                params: new_params,
                 ret: Box::new(Type::Any)
             };
 
-            ctx_stack.is_function = true;
+            ctx_stack.function_depth += 1;
             check_block(ctx, ctx_stack, &init);
-            ctx_stack.is_function = false;
+            ctx_stack.function_depth -= 1;
         },
 
         HirStmtKind::If { cond, then_block, else_block } => {
@@ -105,9 +152,24 @@ fn check_stmt(ctx: &mut PassContext, ctx_stack: &mut ContextStack, stmt: &HirStm
         },
 
         HirStmtKind::Return(expr) => {
-            if !ctx_stack.is_function {
+            if ctx_stack.function_depth == 0 {
                 let msg = "cannot return outside function declaration";
                 ctx.diags.push(Diagnostic::error(msg, stmt.span));
+            }
+
+            if let Some(expected) = &ctx_stack.expected_return {
+                if let Some(expr) = &expr {
+                    let actual = types::type_expr(ctx, expr);
+                    let mismatch = *expected != actual && *expected != Type::Any;
+
+                    if mismatch {
+                        let msg = format!(
+                            "return does not match expected type '{}'",
+                            types::fmt_type(ctx, expected)
+                        );
+                        ctx.diags.push(Diagnostic::error(msg, stmt.span));
+                    }
+                }
             }
         },
 
@@ -119,8 +181,9 @@ fn check_stmt(ctx: &mut PassContext, ctx_stack: &mut ContextStack, stmt: &HirStm
 
 pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) {
     let mut ctx_stack = ContextStack {
-        is_function: false,
+        function_depth: 0,
         loop_depth: 0,
+        expected_return: None,
     };
 
     for stmt in hir {

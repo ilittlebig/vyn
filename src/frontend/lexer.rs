@@ -109,6 +109,7 @@ pub enum TokenKind {
     StringLiteral,
     Comment,
     MultiLineComment,
+    Arrow,
     LParen,
     RParen,
     LBrace,
@@ -510,6 +511,14 @@ impl Lexer {
             }
         }
 
+        if let Some((b1, b2)) = self.peek2() {
+            if b1 == b'-' && b2 == b'>' {
+                self.bump();
+                self.bump();
+                return self.token(TokenKind::Arrow, start, self.current_pos);
+            }
+        }
+
         if let Some(operator) = self.scan_operator() {
             return self.token(TokenKind::Operator(operator), start, self.current_pos);
         }
@@ -551,8 +560,8 @@ impl Lexer {
             self.bump();
             return self.token(TokenKind::RBracket, start, self.current_pos);
         }
-        self.bump();
 
+        self.bump();
         let end = self.current_pos;
         self.lex_error(LexError::UnexpectedChar(b), start, end)
     }

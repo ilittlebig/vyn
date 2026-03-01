@@ -5,8 +5,10 @@
  * Created: 2026-02-06
  **/
 
+use crate::passes::types;
 use crate::passes::types::Type;
-use crate::frontend::parser::{ Stmt, StmtKind, Expr, Block };
+
+use crate::frontend::parser::{ TypeRef, Stmt, StmtKind, Expr, Block, Param };
 use crate::diagnostics::{ Span, Spanned, Diagnostic };
 use crate::passes::{ PassContext, Symbol, Def, DefId, DefKind };
 use crate::passes::hir::{ HirExprKind, HirExpr, HirParam, HirFunc, HirBlock, HirStmt, HirStmtKind };
@@ -65,13 +67,14 @@ fn lower_function_scoped(
     ctx: &mut PassContext,
     func_name: Option<(Symbol, Span)>,
     body: &Block,
-    params: &[(String, Span)]
+    params: &[Param]
 ) -> (HirBlock, Vec<HirParam>) {
     // we push scope here so function params has the same scope as the block
     ctx.push_scope();
 
     let mut new_params = Vec::new();
-    for (name, name_span) in params {
+    for param in params {
+        let (name, name_span) = &param.name;
         let symbol = ctx.interner.intern(&name);
 
         // warning about recusion not possible if paramter shadows function
@@ -82,9 +85,19 @@ fn lower_function_scoped(
             ));
         }
 
-        declare_var(ctx, symbol, *name_span, DefKind::Param);
-        let param = HirParam { name: symbol, span: *name_span };
-        new_params.push(param);
+        let type_ref = &param.ty;
+        let param_ann = if let Some(t_ref) = type_ref {
+            let (ty, _) = types::lower_type_ref(ctx, t_ref);
+            ty
+        } else {
+            Type::Any
+        };
+
+        let def_id = declare_var(ctx, symbol, *name_span, DefKind::Param);
+        ctx.def_types[def_id.0] = param_ann;
+
+        let new_param = HirParam { def_id, span: *name_span };
+        new_params.push(new_param);
     }
 
     let block = traverse_block(ctx, body);
@@ -118,11 +131,15 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
         },
 
         Expr::Func(f) => {
+            let fn_ret = &f.ret;
+            let ret_type = fn_ret.as_ref().map(|type_ref| types::lower_type_ref(ctx, &type_ref).0);
             let (block, params) = lower_function_scoped(ctx, None, &f.body, &f.params);
+
             HirExpr {
                 kind: HirExprKind::Func(HirFunc {
                     body: Box::new(block),
-                    params
+                    params,
+                    ret: ret_type,
                 }),
                 span: expr.span
             }
@@ -218,7 +235,7 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
 
             HirStmt {
                 kind: HirStmtKind::Decl { def_id, init },
-                span: Span { start: 0, end: 0 },
+                span: stmt.span,
             }
         },
 
@@ -230,6 +247,8 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
             // here we declare var before traversing, to allow for function
             // recursion inside local function a() { a() }
             let def_id = declare_var(ctx, symbol, *name_span, DefKind::Function);
+            let fn_ret = &init.ret;
+            let ret = fn_ret.as_ref().map(|type_ref| types::lower_type_ref(ctx, &type_ref));
 
             let (block, params) = lower_function_scoped(
                 ctx,
@@ -239,8 +258,8 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
             );
 
             HirStmt {
-                kind: HirStmtKind::FuncDecl { def_id, params, init: block },
-                span: Span { start: 0, end: 0 },
+                kind: HirStmtKind::FuncDecl { def_id, params, init: block, ret },
+                span: stmt.span,
             }
         },
 
@@ -249,7 +268,7 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
             let block = traverse_block_scoped(ctx, body);
             HirStmt {
                 kind: HirStmtKind::While { cond: expr, body: block },
-                span: Span { start: 0, end: 0 },
+                span: stmt.span,
             }
         },
         StmtKind::If { cond, then_block, else_block } => {
@@ -258,7 +277,7 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
             let else_block = else_block.as_ref().map(|b| traverse_block_scoped(ctx, b));
             HirStmt {
                 kind: HirStmtKind::If { cond: expr, then_block, else_block },
-                span: Span { start: 0, end: 0 },
+                span: stmt.span,
             }
         },
         StmtKind::Return(expr) => {
@@ -272,24 +291,24 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
             let block = traverse_block_scoped(ctx, block);
             HirStmt {
                 kind: HirStmtKind::Block(block),
-                span: Span { start: 0, end: 0 },
+                span: stmt.span,
             }
         },
         StmtKind::ExprStmt(expr) => {
             let expr = traverse_expr(ctx, expr);
             HirStmt {
                 kind: HirStmtKind::Expr(expr),
-                span: Span { start: 0, end: 0 },
+                span: stmt.span,
             }
         },
 
         StmtKind::Break => HirStmt {
             kind: HirStmtKind::Break,
-            span: Span { start: 0, end: 0 },
+            span: stmt.span,
         },
         StmtKind::Continue => HirStmt {
             kind: HirStmtKind::Continue,
-            span: Span { start: 0, end: 0 },
+            span: stmt.span,
         },
     }
 }

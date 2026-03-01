@@ -64,9 +64,16 @@ pub struct Block {
 }
 
 #[derive(Debug, Clone)]
+pub struct Param {
+    pub name: (String, Span),
+    pub ty: Option<TypeRef>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Func {
     pub body: Box<Block>,
-    pub params: Vec<(String, Span)>,
+    pub params: Vec<Param>,
+    pub ret: Option<TypeRef>,
 }
 
 pub type ExprSpanned = Spanned<Expr>;
@@ -283,10 +290,12 @@ impl Parser {
                 let params = self.parse_params()?;
                 self.expect_closing(TokenKind::RParen, lparen.span)?;
 
+                let ret = self.parse_fn_ret_type()?;
                 let body = self.parse_block()?;
                 let span = fn_token.span.join(body.span);
+
                 return Ok(Spanned {
-                    node: Expr::Func(Func { body: Box::new(body), params }),
+                    node: Expr::Func(Func { body: Box::new(body), params, ret }),
                     span
                 });
             },
@@ -390,12 +399,18 @@ impl Parser {
         Ok(args)
     }
 
-    fn parse_params(&mut self) -> Result<Vec<(String, Span)>, ParseError> {
+    fn parse_params(&mut self) -> Result<Vec<Param>, ParseError> {
         let mut params = Vec::new();
         if !self.peek_is(&TokenKind::RParen) {
             loop {
                 let ident = self.expect_ident()?;
-                params.push(ident);
+                let param_ty = if self.consume_if(Expected::Token(TokenKind::Colon)).is_some() {
+                    let (ty_name, ty_span) = self.expect_ident()?;
+                    Some(TypeRef::Named(ty_name, ty_span))
+                } else {
+                    None
+                };
+                params.push(Param { name: ident, ty: param_ty });
 
                 if self.consume_if(Expected::Token(TokenKind::Comma)).is_some() {
                     // no trailing comma allowed
@@ -523,6 +538,17 @@ impl Parser {
         })
     }
 
+    fn parse_fn_ret_type(&mut self) -> Result<Option<TypeRef>, ParseError> {
+        let arrow = self.consume_if(Expected::Token(TokenKind::Arrow));
+        if arrow.is_some() {
+            let (name, span) = self.expect_ident()?;
+            let type_ref = TypeRef::Named(name, span);
+            Ok(Some(type_ref))
+        } else {
+            Ok(None)
+        }
+    }
+
     /*
      * decl_stmt :=
      *     "local" (
@@ -548,13 +574,14 @@ impl Parser {
             let params = self.parse_params()?;
             self.expect_closing(TokenKind::RParen, lparen.span)?;
 
+            let ret = self.parse_fn_ret_type()?;
             let body = self.parse_block()?;
             let end_span = body.span;
 
             Ok(Stmt {
                 kind: StmtKind::LocalFuncDecl {
                     name: (name, name_span),
-                    init: Func { body: Box::new(body), params }
+                    init: Func { body: Box::new(body), params, ret }
                 },
                 span: start_span.join(end_span),
             })
@@ -622,14 +649,16 @@ impl Parser {
         let params = self.parse_params()?;
         self.expect_closing(TokenKind::RParen, lparen.span)?;
 
+        let ret = self.parse_fn_ret_type()?;
         let body = self.parse_block()?;
+
         let start_span = fn_token.span;
         let end_span = body.span;
 
         Ok(Stmt {
             kind: StmtKind::FuncDecl {
                 name: (name, name_span),
-                init: Func { body: Box::new(body), params }
+                init: Func { body: Box::new(body), params, ret }
             },
             span: start_span.join(end_span),
         })

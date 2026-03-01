@@ -6,6 +6,7 @@
  **/
 
 use crate::diagnostics::Span;
+use crate::passes::types::Type;
 use crate::frontend::parser::UnaryOp;
 use crate::frontend::lexer::Operator;
 use crate::passes::{ Symbol, DefId };
@@ -40,7 +41,7 @@ pub struct HirExpr {
 
 #[derive(Debug)]
 pub struct HirParam {
-    pub name: Symbol,
+    pub def_id: DefId,
     pub span: Span,
 }
 
@@ -48,6 +49,7 @@ pub struct HirParam {
 pub struct HirFunc {
     pub body: Box<HirBlock>,
     pub params: Vec<HirParam>,
+    pub ret: Option<Type>,
 }
 
 #[derive(Debug)]
@@ -59,7 +61,7 @@ pub struct HirBlock {
 #[derive(Debug)]
 pub enum HirStmtKind {
     Decl { def_id: DefId, init: Option<HirExpr> },
-    FuncDecl { def_id: DefId, params: Vec<HirParam>, init: HirBlock },
+    FuncDecl { def_id: DefId, params: Vec<HirParam>, init: HirBlock, ret: Option<(Type, Span)> },
 
     While { cond: HirExpr, body: HirBlock },
     If { cond: HirExpr, then_block: HirBlock, else_block: Option<HirBlock> },
