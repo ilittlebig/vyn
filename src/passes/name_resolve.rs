@@ -333,7 +333,6 @@ pub fn run(ctx: &mut PassContext, ast: &Vec<Stmt>) -> Vec<HirStmt> {
     let mut hir = Vec::new();
     for stmt in ast {
         let hir_stmt = traverse_stmt(ctx, stmt);
-        println!("{:#?}", hir_stmt);
         hir.push(hir_stmt);
     }
     hir

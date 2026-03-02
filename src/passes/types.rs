@@ -148,7 +148,10 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
         HirExprKind::Call { callee, args, .. } => {
             let ty = type_expr(ctx, &callee);
             match ty {
-                Type::Func { .. } => ty,
+                Type::Func { ret, .. } => {
+                    // arity & check arg assignability later
+                    (*ret).clone()
+                },
                 _ => {
                     let msg = format!(
                         "attempted to call a non-function value (type: '{}')",

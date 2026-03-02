@@ -126,9 +126,15 @@ fn check_stmt(ctx: &mut PassContext, ctx_stack: &mut ContextStack, stmt: &HirStm
                 new_params.push(ty);
             }
 
+            let ret_type = if let Some((ty, _)) = &ret {
+                ty
+            } else {
+                &Type::Any
+            };
+
             ctx.def_types[def_id.0] = Type::Func {
                 params: new_params,
-                ret: Box::new(Type::Any)
+                ret: Box::new(ret_type.clone())
             };
 
             ctx_stack.function_depth += 1;
@@ -164,7 +170,8 @@ fn check_stmt(ctx: &mut PassContext, ctx_stack: &mut ContextStack, stmt: &HirStm
 
                     if mismatch {
                         let msg = format!(
-                            "return does not match expected type '{}'",
+                            "return type '{}' does not match expected type '{}'",
+                            types::fmt_type(ctx, &actual),
                             types::fmt_type(ctx, expected)
                         );
                         ctx.diags.push(Diagnostic::error(msg, stmt.span));

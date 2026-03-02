@@ -22,13 +22,10 @@ if 1 + "hello" {}
 if "a" + "b" {}
 */
 
-local function foo(a: string, b: int, c: double, d) -> int {
-    if true {
-        return 1
-    } else {
-        return 1
-    }
-    return 1
+local function foo() -> int {
+    //local a: int = 1
+    //local b: int = 2
+    return 1//a + b
 }
 
 /*
