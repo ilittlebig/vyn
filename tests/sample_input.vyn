@@ -23,11 +23,12 @@ if "a" + "b" {}
 */
 
 local function foo() {
-    local a = 1;
-    if 1 < 2 {
+    local a = 1.5;
+    if 1 >= 2.22 {
         local b = 2;
-    //} else {
-    //    local c = 3;
+        foo()
+    } else {
+        local c = 3;
     }
     local d = 4;
 }

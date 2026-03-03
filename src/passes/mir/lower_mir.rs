@@ -70,7 +70,7 @@ impl Builder {
             term: None
         });
 
-        self.set_block(id);
+        //self.set_block(id);
         id
     }
 
@@ -85,7 +85,8 @@ impl Builder {
         });
 
         self.set_func(id);
-        self.new_block();
+        let block_id = self.new_block();
+        self.set_block(block_id);
         id
     }
 
@@ -112,6 +113,7 @@ impl Builder {
     fn lower_expr(&mut self, expr: &HirExpr) -> MirValue {
         match &expr.kind {
             HirExprKind::Int(v) => MirValue::ConstInt(*v),
+            HirExprKind::Double(v) => MirValue::ConstDouble(*v),
             HirExprKind::VarRef { def: def_id } => {
                 if let Some(id) = self.def_to_local[def_id.0] {
                     return MirValue::Local(id);
@@ -195,29 +197,22 @@ impl Builder {
                         _ => todo!() // no idea
                     };
 
-                    let header_bb = self.current_block;
                     let then_bb = self.new_block();
+                    let else_bb = else_block.as_ref().map(|_| self.new_block());
                     let join_bb = self.new_block();
 
-                    let else_bb = if else_block.is_some() {
-                        self.new_block()
-                    } else {
-                        join_bb
-                    };
-
-                    self.set_block(header_bb);
-                    self.terminate(MirTerm::If { cond: cond_value, then_bb, else_bb });
+                    let else_target = else_bb.unwrap_or(join_bb);
+                    self.terminate(MirTerm::If { cond: cond_value, then_bb, else_bb: else_target });
 
                     self.set_block(then_bb);
                     self.lower_into(ctx, func_id, &then_block.stmts);
                     self.terminate(MirTerm::Goto(join_bb));
 
                     if let Some(else_block) = else_block {
-                        self.set_block(else_bb);
+                        self.set_block(else_target);
                         self.lower_into(ctx, func_id, &else_block.stmts);
                         self.terminate(MirTerm::Goto(join_bb));
                     }
-
                     self.set_block(join_bb);
                 },
                 HirStmtKind::Return(expr) => {

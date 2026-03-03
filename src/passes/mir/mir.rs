@@ -64,6 +64,7 @@ pub enum MirValue {
     Func(FuncId),
     Local(LocalId),
     ConstInt(i64),
+    ConstDouble(f64),
     ConstBool(bool),
     Nil,
 }

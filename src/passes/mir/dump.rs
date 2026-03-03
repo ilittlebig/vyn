@@ -180,6 +180,9 @@ impl MirPrinter<'_> {
             MirValue::ConstInt(i) => {
                 self.write_raw_fmt(format_args!("const {}", i));
             },
+            MirValue::ConstDouble(f) => {
+                self.write_raw_fmt(format_args!("const {}", f));
+            },
             MirValue::ConstBool(b) => {
                 self.write_raw_fmt(format_args!("const {}", b));
             },
