@@ -10,7 +10,7 @@ use crate::passes::{ PassContext, Symbol, DefId };
 use crate::passes::hir::{ HirStmt, HirStmtKind, HirExpr, HirExprKind };
 use crate::passes::mir::{
     Builder, MirProgram, MirFunction, MirStmt, MirTerm, BasicBlock, FuncId, BlockId,
-    LocalId, MirValue, MirPrinter, BinOp
+    LocalId, MirValue, MirPrinter, BinOp, MirPlace
 };
 
 impl Builder {
@@ -69,8 +69,6 @@ impl Builder {
             stmts: Vec::new(),
             term: None
         });
-
-        //self.set_block(id);
         id
     }
 
@@ -110,6 +108,22 @@ impl Builder {
         }
     }
 
+    fn lower_place(&mut self, expr: &HirExpr) -> MirPlace {
+        match &expr.kind {
+            HirExprKind::VarRef { def: def_id } => {
+                let local_id = if let Some(id) = self.def_to_local[def_id.0] {
+                    id
+                } else {
+                    // what do we do here, this has to error or something
+                    // right now i just use a dummy value
+                    LocalId(999)
+                };
+                MirPlace::Local(local_id)
+            }
+            _ => todo!(),
+        }
+    }
+
     fn lower_expr(&mut self, expr: &HirExpr) -> MirValue {
         match &expr.kind {
             HirExprKind::Int(v) => MirValue::ConstInt(*v),
@@ -145,6 +159,12 @@ impl Builder {
                 self.emit_stmt(MirStmt::Call { dst: temp_id, callee, args: new_args });
                 MirValue::Local(temp_id)
             },
+            HirExprKind::Assign { target, value } => {
+                let target_place = self.lower_place(target);
+                let rhs = self.lower_expr(value);
+                self.emit_stmt(MirStmt::Assign { dst: target_place, src: rhs.clone() });
+                rhs
+            },
             _ => MirValue::ConstBool(false),
         }
     }
@@ -176,21 +196,21 @@ impl Builder {
                     };
 
                     let local_id = self.new_local(def_id);
-                    self.emit_stmt(MirStmt::Assign { dst: local_id, src: rhs });
+                    self.emit_stmt(MirStmt::Assign { dst: MirPlace::Local(local_id), src: rhs });
                 },
                 HirStmtKind::If { cond, then_block, else_block } => {
                     let cond_value = match &cond.kind {
                         HirExprKind::Bool(b) => MirValue::ConstBool(*b),
                         HirExprKind::Binary { lhs, op, rhs } => {
-                            let lhs_value = self.lower_expr(&lhs);
-                            let rhs_value = self.lower_expr(&rhs);
+                            let lhs = self.lower_expr(&lhs);
+                            let rhs = self.lower_expr(&rhs);
 
                             let temp_id = self.new_temp();
                             self.emit_stmt(MirStmt::BinOp {
                                 dst: temp_id,
                                 op: self.lower_op(&op),
-                                lhs: lhs_value,
-                                rhs: rhs_value
+                                lhs,
+                                rhs
                             });
                             MirValue::Local(temp_id)
                         },

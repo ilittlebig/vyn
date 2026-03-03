@@ -47,7 +47,7 @@ pub struct BasicBlock {
 
 #[derive(Debug)]
 pub enum MirStmt {
-    Assign { dst: LocalId, src: MirValue },
+    Assign { dst: MirPlace, src: MirValue },
     BinOp { dst: LocalId, op: BinOp, lhs: MirValue, rhs: MirValue },
     Call { dst: LocalId, callee: MirValue, args: Vec<MirValue> },
 }
@@ -59,7 +59,7 @@ pub enum MirTerm {
     Return(MirValue),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MirValue {
     Func(FuncId),
     Local(LocalId),
@@ -67,6 +67,11 @@ pub enum MirValue {
     ConstDouble(f64),
     ConstBool(bool),
     Nil,
+}
+
+#[derive(Debug)]
+pub enum MirPlace {
+    Local(LocalId),
 }
 
 #[derive(Debug)]

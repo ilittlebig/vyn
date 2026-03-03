@@ -10,7 +10,7 @@ use std::fmt::{ self, Write };
 use crate::passes::PassContext;
 use crate::passes::mir::{
     MirProgram, MirFunction, MirStmt, MirTerm, BasicBlock,
-    MirValue, BinOp,
+    MirValue, BinOp, MirPlace
 };
 
 pub struct MirPrinter<'a> {
@@ -109,7 +109,7 @@ impl MirPrinter<'_> {
         match stmt {
             MirStmt::Assign { dst, src } => {
                 self.begin_line();
-                self.write_raw_fmt(format_args!("l{} = ", dst.0));
+                self.print_place(dst);
                 self.print_value(src);
                 self.end_line();
             },
@@ -139,6 +139,13 @@ impl MirPrinter<'_> {
                 self.write_raw("]");
                 self.end_line();
             },
+        }
+    }
+
+    fn print_place(&mut self, place: &MirPlace) {
+        match place {
+            MirPlace::Local(id) => self.write_raw_fmt(format_args!("l{} = ", id.0)),
+            _ => self.write_raw("<unimplemented place>"),
         }
     }
 
