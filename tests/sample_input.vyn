@@ -22,12 +22,7 @@ if 1 + "hello" {}
 if "a" + "b" {}
 */
 
-local function boo() {
-    return 1;
-}
-
 local function foo() {
-    return boo(23, 1, 5);
 }
 
 /*

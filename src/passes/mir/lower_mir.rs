@@ -145,7 +145,12 @@ impl Builder {
                     let name = ctx.defs[def_id.0].name;
                     let new_func_id = self.new_func(name);
                     self.def_to_func[def_id.0] = Some(new_func_id);
+
                     self.lower_into(ctx, new_func_id, &init.stmts);
+                    let current_block = self.get_current_block();
+                    if current_block.term.is_none() {
+                        self.terminate(MirTerm::Return(MirValue::Nil));
+                    }
                     self.set_func(func_id);
                 },
                 HirStmtKind::Decl { def_id, init } => {
@@ -179,6 +184,7 @@ pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) -> MirProgram {
         program: MirProgram { entry: FuncId(0), funcs: Vec::new() },
         current_func: FuncId(0),
         current_block: BlockId(0),
+
         def_to_local: vec![None; ctx.defs.len()],
         def_to_func: vec![None; ctx.defs.len()],
     };

@@ -74,7 +74,7 @@ impl MirPrinter<'_> {
                 p.print_func(&func);
             }
         });
-        self.line("}");
+        self.write_raw("}");
     }
 
     fn print_func(&mut self, func: &MirFunction) {
@@ -82,7 +82,7 @@ impl MirPrinter<'_> {
             fn_name
         } else {
             // should never happend
-            "unknown_symbol"
+            <"unknown_symbol">
         };
 
         self.line_fmt(format_args!("fn{} {}() {{", func.id.0, name));
