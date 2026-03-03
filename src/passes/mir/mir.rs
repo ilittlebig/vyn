@@ -19,6 +19,7 @@ pub struct Builder {
     pub program: MirProgram,
     pub current_func: FuncId,
     pub current_block: BlockId,
+    pub def_to_local: Vec<Option<LocalId>>,
 }
 
 #[derive(Debug)]
@@ -67,4 +68,8 @@ pub enum MirValue {
 #[derive(Debug)]
 pub enum BinOp {
     Add,
+    Minus,
+    Division,
+    Multiplication,
+    Modulus,
 }

@@ -5,11 +5,12 @@
  * Created: 2026-03-01
  **/
 
-use crate::passes::{ PassContext, Symbol };
+use crate::frontend::lexer::Operator;
+use crate::passes::{ PassContext, Symbol, DefId };
 use crate::passes::hir::{ HirStmt, HirStmtKind, HirExpr, HirExprKind };
 use crate::passes::mir::{
     Builder, MirProgram, MirFunction, MirStmt, MirTerm, BasicBlock, FuncId, BlockId,
-    LocalId, MirValue, MirPrinter,
+    LocalId, MirValue, MirPrinter, BinOp
 };
 
 impl Builder {
@@ -41,7 +42,19 @@ impl Builder {
         block.term = Some(term);
     }
 
-    fn new_local(&mut self) -> LocalId {
+    fn new_local(&mut self, def_id: &DefId) -> LocalId {
+        let id = {
+            let mut func = self.get_current_func();
+            let id = LocalId(func.locals);
+            func.locals += 1;
+            id
+        };
+
+        self.def_to_local[def_id.0] = Some(id);
+        id
+    }
+
+    fn new_temp(&mut self) -> LocalId {
         let mut func = self.get_current_func();
         let id = LocalId(func.locals);
         func.locals += 1;
@@ -76,9 +89,37 @@ impl Builder {
         id
     }
 
-    fn lower_expr(&self, expr: &HirExpr) -> MirValue {
+    fn lower_op(&self, op: &Operator) -> BinOp {
+        match op {
+            Operator::Plus => BinOp::Add,
+            Operator::Minus => BinOp::Minus,
+            Operator::Division => BinOp::Division,
+            Operator::Multiplication => BinOp::Multiplication,
+            Operator::Modulus => BinOp::Modulus,
+            _ => { todo!(); }
+        }
+    }
+
+    fn lower_expr(&mut self, expr: &HirExpr) -> MirValue {
         match &expr.kind {
             HirExprKind::Int(v) => MirValue::ConstInt(*v),
+            HirExprKind::VarRef { def: def_id } => {
+                let local_id = self.def_to_local[def_id.0];
+                if let Some(id) = local_id {
+                    MirValue::Local(id)
+                } else {
+                    MirValue::Nil
+                }
+            },
+            HirExprKind::Binary { lhs, op, rhs } => {
+                let lhs = self.lower_expr(lhs);
+                let rhs = self.lower_expr(rhs);
+
+                let temp_id = self.new_temp();
+                let op = self.lower_op(op);
+                self.emit_stmt(MirStmt::BinOp { dst: temp_id, lhs, op, rhs });
+                MirValue::Local(temp_id)
+            },
             _ => MirValue::ConstBool(false),
         }
     }
@@ -91,6 +132,16 @@ impl Builder {
                     let new_func_id = self.new_func(name);
                     self.lower_into(ctx, new_func_id, &init.stmts);
                     self.set_func(func_id);
+                },
+                HirStmtKind::Decl { def_id, init } => {
+                    let rhs = if let Some(expr) = init {
+                        self.lower_expr(expr)
+                    } else {
+                        MirValue::Nil
+                    };
+
+                    let local_id = self.new_local(def_id);
+                    self.emit_stmt(MirStmt::Assign { dst: local_id, src: rhs });
                 },
                 HirStmtKind::Return(expr) => {
                     let value = if let Some(expr) = expr {
@@ -112,6 +163,7 @@ pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) -> MirProgram {
         program: MirProgram { entry: FuncId(0), funcs: Vec::new() },
         current_func: FuncId(0),
         current_block: BlockId(0),
+        def_to_local: vec![None; ctx.defs.len()],
     };
 
     let entry_id = builder.new_func(__module_init_symbol);
