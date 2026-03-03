@@ -277,6 +277,17 @@ impl Builder {
                     self.set_block(exit_bb);
                     self.pop_loop();
                 },
+                HirStmtKind::Block(block) => {
+                    let block_bb = self.new_block();
+                    let continue_bb = self.new_block();
+                    self.terminate(MirTerm::Goto(block_bb));
+
+                    self.set_block(block_bb);
+                    self.lower_into(ctx, func_id, &block.stmts);
+
+                    self.terminate(MirTerm::Goto(continue_bb));
+                    self.set_block(continue_bb);
+                },
                 HirStmtKind::Break => {
                     // don't know what to do with these dummy values, since it should never happen
                     // but it needs to be handled

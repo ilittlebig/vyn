@@ -40,9 +40,14 @@ while true {
 
 local function foo(a, b, c) {
     local aa = 24;
-    a = aa;
+    {
+        a = aa;
+        { aa = a }
+    }
+    local bb = 43;
     return 2
 }
+foo()
 
 /*
 local function foo() {
