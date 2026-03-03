@@ -135,6 +135,7 @@ impl MirPrinter<'_> {
                     index += 1;
                     if index != args.len() { self.write_raw(", "); }
                 }
+
                 self.write_raw("]");
                 self.end_line();
             },
