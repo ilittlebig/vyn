@@ -82,7 +82,7 @@ impl MirPrinter<'_> {
             fn_name
         } else {
             // should never happend
-            <"unknown_symbol">
+            "<unknown_symbol>"
         };
 
         self.line_fmt(format_args!("fn{} {}() {{", func.id.0, name));
@@ -151,9 +151,18 @@ impl MirPrinter<'_> {
                 self.end_line();
             },
             Some(MirTerm::Goto(block_id)) => {
-                self.line_fmt(format_args!("goto {}", block_id.0));
+                self.line_fmt(format_args!("goto bb{}", block_id.0));
             },
-            Some(MirTerm::If { .. }) => self.line("<unimplemented terminator>"),
+            Some(MirTerm::If { cond, then_bb, else_bb }) => {
+                self.begin_line();
+                self.write_raw("if ");
+                self.print_value(cond);
+                self.write_raw(" ");
+                self.write_raw_fmt(format_args!("goto bb{}", then_bb.0));
+                self.write_raw(" else ");
+                self.write_raw_fmt(format_args!("goto bb{}", else_bb.0));
+                self.end_line();
+            },
             None => self.line("<missing terminator>"),
         }
     }
@@ -171,6 +180,9 @@ impl MirPrinter<'_> {
             MirValue::ConstInt(i) => {
                 self.write_raw_fmt(format_args!("const {}", i));
             },
+            MirValue::ConstBool(b) => {
+                self.write_raw_fmt(format_args!("const {}", b));
+            },
             MirValue::Nil => self.out.push_str("nil"),
             _ => self.out.push_str("<unimplemented value>"),
         }
@@ -178,11 +190,20 @@ impl MirPrinter<'_> {
 
     fn print_op(&mut self, op: &BinOp) {
         match op {
+            // arithmetic
             BinOp::Add => self.write_raw("add"),
             BinOp::Minus => self.write_raw("sub"),
             BinOp::Division => self.write_raw("div"),
             BinOp::Multiplication => self.write_raw("mul"),
             BinOp::Modulus => self.write_raw("mod"),
+
+            // comparison
+            BinOp::Equal => self.write_raw("eq"),
+            BinOp::NotEqual => self.write_raw("neq"),
+            BinOp::LessThan => self.write_raw("lt"),
+            BinOp::LessThanEqual => self.write_raw("lte"),
+            BinOp::GreaterThan => self.write_raw("gt"),
+            BinOp::GreaterThanEqual => self.write_raw("gte"),
             _ => self.write_raw("<unimplemented operator>"),
         }
     }

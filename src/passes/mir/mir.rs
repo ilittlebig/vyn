@@ -70,9 +70,18 @@ pub enum MirValue {
 
 #[derive(Debug)]
 pub enum BinOp {
+    // arithmetic
     Add,
     Minus,
     Division,
     Multiplication,
     Modulus,
+
+    // comparison
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanEqual,
+    GreaterThan,
+    GreaterThanEqual,
 }

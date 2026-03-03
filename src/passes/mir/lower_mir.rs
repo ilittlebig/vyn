@@ -61,7 +61,7 @@ impl Builder {
         id
     }
 
-    fn new_block(&mut self, func_id: FuncId) -> BlockId {
+    fn new_block(&mut self) -> BlockId {
         let func = self.get_current_func();
         let id = BlockId(func.blocks.len());
         func.blocks.push(BasicBlock {
@@ -85,17 +85,26 @@ impl Builder {
         });
 
         self.set_func(id);
-        self.new_block(id);
+        self.new_block();
         id
     }
 
     fn lower_op(&self, op: &Operator) -> BinOp {
         match op {
+            // arithmetic
             Operator::Plus => BinOp::Add,
             Operator::Minus => BinOp::Minus,
             Operator::Division => BinOp::Division,
             Operator::Multiplication => BinOp::Multiplication,
             Operator::Modulus => BinOp::Modulus,
+
+            // comparison
+            Operator::Equal => BinOp::Equal,
+            Operator::NotEqual => BinOp::NotEqual,
+            Operator::LessThan => BinOp::LessThan,
+            Operator::LessThanEqual => BinOp::LessThanEqual,
+            Operator::GreaterThan => BinOp::GreaterThan,
+            Operator::GreaterThanEqual => BinOp::GreaterThanEqual,
             _ => { todo!(); }
         }
     }
@@ -142,6 +151,8 @@ impl Builder {
         for stmt in stmts {
             match &stmt.kind {
                 HirStmtKind::FuncDecl { def_id, init, .. } => {
+                    let start_block_id = self.current_block;
+
                     let name = ctx.defs[def_id.0].name;
                     let new_func_id = self.new_func(name);
                     self.def_to_func[def_id.0] = Some(new_func_id);
@@ -151,7 +162,9 @@ impl Builder {
                     if current_block.term.is_none() {
                         self.terminate(MirTerm::Return(MirValue::Nil));
                     }
+
                     self.set_func(func_id);
+                    self.set_block(start_block_id);
                 },
                 HirStmtKind::Decl { def_id, init } => {
                     let rhs = if let Some(expr) = init {
@@ -163,6 +176,50 @@ impl Builder {
                     let local_id = self.new_local(def_id);
                     self.emit_stmt(MirStmt::Assign { dst: local_id, src: rhs });
                 },
+                HirStmtKind::If { cond, then_block, else_block } => {
+                    let cond_value = match &cond.kind {
+                        HirExprKind::Bool(b) => MirValue::ConstBool(*b),
+                        HirExprKind::Binary { lhs, op, rhs } => {
+                            let lhs_value = self.lower_expr(&lhs);
+                            let rhs_value = self.lower_expr(&rhs);
+
+                            let temp_id = self.new_temp();
+                            self.emit_stmt(MirStmt::BinOp {
+                                dst: temp_id,
+                                op: self.lower_op(&op),
+                                lhs: lhs_value,
+                                rhs: rhs_value
+                            });
+                            MirValue::Local(temp_id)
+                        },
+                        _ => todo!() // no idea
+                    };
+
+                    let header_bb = self.current_block;
+                    let then_bb = self.new_block();
+                    let join_bb = self.new_block();
+
+                    let else_bb = if else_block.is_some() {
+                        self.new_block()
+                    } else {
+                        join_bb
+                    };
+
+                    self.set_block(header_bb);
+                    self.terminate(MirTerm::If { cond: cond_value, then_bb, else_bb });
+
+                    self.set_block(then_bb);
+                    self.lower_into(ctx, func_id, &then_block.stmts);
+                    self.terminate(MirTerm::Goto(join_bb));
+
+                    if let Some(else_block) = else_block {
+                        self.set_block(else_bb);
+                        self.lower_into(ctx, func_id, &else_block.stmts);
+                        self.terminate(MirTerm::Goto(join_bb));
+                    }
+
+                    self.set_block(join_bb);
+                },
                 HirStmtKind::Return(expr) => {
                     let value = if let Some(expr) = expr {
                         self.lower_expr(&expr)
@@ -172,7 +229,7 @@ impl Builder {
                     self.terminate(MirTerm::Return(value));
                 },
                 HirStmtKind::Expr(expr) => { self.lower_expr(expr); },
-                _ => {},
+                _ => { todo!() },
             }
         }
     }
