@@ -104,12 +104,13 @@ impl Builder {
         match &expr.kind {
             HirExprKind::Int(v) => MirValue::ConstInt(*v),
             HirExprKind::VarRef { def: def_id } => {
-                let local_id = self.def_to_local[def_id.0];
-                if let Some(id) = local_id {
-                    MirValue::Local(id)
-                } else {
-                    MirValue::Nil
+                if let Some(id) = self.def_to_local[def_id.0] {
+                    return MirValue::Local(id);
                 }
+                if let Some(id) = self.def_to_func[def_id.0] {
+                    return MirValue::Func(id);
+                }
+                MirValue::Nil
             },
             HirExprKind::Binary { lhs, op, rhs } => {
                 let lhs = self.lower_expr(lhs);
@@ -118,6 +119,19 @@ impl Builder {
                 let temp_id = self.new_temp();
                 let op = self.lower_op(op);
                 self.emit_stmt(MirStmt::BinOp { dst: temp_id, lhs, op, rhs });
+                MirValue::Local(temp_id)
+            },
+            HirExprKind::Call { callee, args } => {
+                let temp_id = self.new_temp();
+                let mut new_args = Vec::new();
+
+                for arg in args {
+                    let value = self.lower_expr(arg);
+                    new_args.push(value);
+                }
+
+                let callee = self.lower_expr(callee);
+                self.emit_stmt(MirStmt::Call { dst: temp_id, callee, args: new_args });
                 MirValue::Local(temp_id)
             },
             _ => MirValue::ConstBool(false),
@@ -130,6 +144,7 @@ impl Builder {
                 HirStmtKind::FuncDecl { def_id, init, .. } => {
                     let name = ctx.defs[def_id.0].name;
                     let new_func_id = self.new_func(name);
+                    self.def_to_func[def_id.0] = Some(new_func_id);
                     self.lower_into(ctx, new_func_id, &init.stmts);
                     self.set_func(func_id);
                 },
@@ -151,6 +166,7 @@ impl Builder {
                     };
                     self.terminate(MirTerm::Return(value));
                 },
+                HirStmtKind::Expr(expr) => { self.lower_expr(expr); },
                 _ => {},
             }
         }
@@ -164,6 +180,7 @@ pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) -> MirProgram {
         current_func: FuncId(0),
         current_block: BlockId(0),
         def_to_local: vec![None; ctx.defs.len()],
+        def_to_func: vec![None; ctx.defs.len()],
     };
 
     let entry_id = builder.new_func(__module_init_symbol);
@@ -176,11 +193,12 @@ pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) -> MirProgram {
 
     // this should only be here if the user passes --dump-hir
     let mut mir_printer = MirPrinter {
+        program: &builder.program,
         ctx,
         out: String::new(),
         indent: 0,
     };
-    mir_printer.dump_program(&builder.program);
+    mir_printer.dump_program();
 
     builder.program
 }

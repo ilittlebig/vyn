@@ -20,6 +20,7 @@ pub struct Builder {
     pub current_func: FuncId,
     pub current_block: BlockId,
     pub def_to_local: Vec<Option<LocalId>>,
+    pub def_to_func: Vec<Option<FuncId>>,
 }
 
 #[derive(Debug)]
@@ -48,6 +49,7 @@ pub struct BasicBlock {
 pub enum MirStmt {
     Assign { dst: LocalId, src: MirValue },
     BinOp { dst: LocalId, op: BinOp, lhs: MirValue, rhs: MirValue },
+    Call { dst: LocalId, callee: MirValue, args: Vec<MirValue> },
 }
 
 #[derive(Debug)]
@@ -59,6 +61,7 @@ pub enum MirTerm {
 
 #[derive(Debug)]
 pub enum MirValue {
+    Func(FuncId),
     Local(LocalId),
     ConstInt(i64),
     ConstBool(bool),

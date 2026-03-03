@@ -14,6 +14,7 @@ use crate::passes::mir::{
 };
 
 pub struct MirPrinter<'a> {
+    pub program: &'a MirProgram,
     pub ctx: &'a PassContext,
     pub out: String,
     pub indent: usize,
@@ -84,7 +85,7 @@ impl MirPrinter<'_> {
             "unknown_symbol"
         };
 
-        self.line_fmt(format_args!("fn{} {}() -> {} {{", func.id.0, name, "nil"));
+        self.line_fmt(format_args!("fn{} {}() {{", func.id.0, name));
         self.with_indent(|p| {
             for block in &func.blocks {
                 p.print_block(&block);
@@ -122,6 +123,21 @@ impl MirPrinter<'_> {
                 self.print_value(rhs);
                 self.end_line();
             },
+            MirStmt::Call { dst, callee, args } => {
+                self.begin_line();
+                self.write_raw_fmt(format_args!("l{} = call ", dst.0));
+                self.print_value(callee);
+                self.write_raw(", [");
+
+                let mut index = 0;
+                for arg in args {
+                    self.print_value(arg);
+                    index += 1;
+                    if index != args.len() { self.write_raw(", "); }
+                }
+                self.write_raw("]");
+                self.end_line();
+            },
         }
     }
 
@@ -143,6 +159,11 @@ impl MirPrinter<'_> {
 
     fn print_value(&mut self, value: &MirValue) {
         match value {
+            MirValue::Func(id) => {
+                let func = &self.program.funcs[id.0];
+                let name = self.ctx.interner.resolve(func.name).unwrap_or("<unknown function>");
+                self.write_raw_fmt(format_args!("{}", name));
+            },
             MirValue::Local(id) => {
                 self.write_raw_fmt(format_args!("l{}", id.0));
             },
@@ -165,8 +186,8 @@ impl MirPrinter<'_> {
         }
     }
 
-    pub fn dump_program(&mut self, program: &MirProgram) {
-        self.print_program(program);
+    pub fn dump_program(&mut self) {
+        self.print_program(self.program);
         println!("{}", self.out);
     }
 }
