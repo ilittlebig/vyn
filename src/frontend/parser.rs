@@ -750,7 +750,7 @@ impl Parser {
     }
 
     fn parse_keyword_stmt_span(&mut self, expected: Expected) -> Result<Span, ParseError> {
-        let token = self.expect(Expected::Keyword(Keyword::Break))?;
+        let token = self.expect(expected)?;
         let semicolon = self.consume_if(Expected::Token(TokenKind::Semicolon));
         let semicolon_span = semicolon.as_ref().map(|t| t.span);
 

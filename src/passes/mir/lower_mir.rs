@@ -10,7 +10,7 @@ use crate::passes::{ PassContext, Symbol, DefId };
 use crate::passes::hir::{ HirStmt, HirStmtKind, HirExpr, HirExprKind };
 use crate::passes::mir::{
     Builder, MirProgram, MirFunction, MirStmt, MirTerm, BasicBlock, FuncId, BlockId,
-    LocalId, MirValue, MirPrinter, BinOp, MirPlace
+    LocalId, MirValue, MirPrinter, BinOp, MirPlace, LoopContext
 };
 
 impl Builder {
@@ -30,6 +30,16 @@ impl Builder {
 
     fn set_block(&mut self, block_id: BlockId) {
         self.current_block = block_id;
+    }
+
+    fn push_loop(&mut self, break_bb: BlockId, continue_bb: BlockId) {
+        self.loop_context.break_bb = Some(break_bb);
+        self.loop_context.continue_bb = Some(continue_bb);
+    }
+
+    fn pop_loop(&mut self) {
+        self.loop_context.break_bb = None;
+        self.loop_context.continue_bb = None;
     }
 
     fn emit_stmt(&mut self, stmt: MirStmt) {
@@ -86,6 +96,26 @@ impl Builder {
         let block_id = self.new_block();
         self.set_block(block_id);
         id
+    }
+
+    fn evaluate_cond(&mut self, cond: &HirExpr) -> MirValue {
+        match &cond.kind {
+            HirExprKind::Bool(b) => MirValue::ConstBool(*b),
+            HirExprKind::Binary { lhs, op, rhs } => {
+                let lhs = self.lower_expr(&lhs);
+                let rhs = self.lower_expr(&rhs);
+
+                let temp_id = self.new_temp();
+                self.emit_stmt(MirStmt::BinOp {
+                    dst: temp_id,
+                    op: self.lower_op(&op),
+                    lhs,
+                    rhs
+                });
+                MirValue::Local(temp_id)
+            },
+            _ => todo!() // no idea
+        }
     }
 
     fn lower_op(&self, op: &Operator) -> BinOp {
@@ -199,23 +229,7 @@ impl Builder {
                     self.emit_stmt(MirStmt::Assign { dst: MirPlace::Local(local_id), src: rhs });
                 },
                 HirStmtKind::If { cond, then_block, else_block } => {
-                    let cond_value = match &cond.kind {
-                        HirExprKind::Bool(b) => MirValue::ConstBool(*b),
-                        HirExprKind::Binary { lhs, op, rhs } => {
-                            let lhs = self.lower_expr(&lhs);
-                            let rhs = self.lower_expr(&rhs);
-
-                            let temp_id = self.new_temp();
-                            self.emit_stmt(MirStmt::BinOp {
-                                dst: temp_id,
-                                op: self.lower_op(&op),
-                                lhs,
-                                rhs
-                            });
-                            MirValue::Local(temp_id)
-                        },
-                        _ => todo!() // no idea
-                    };
+                    let cond_value = self.evaluate_cond(cond);
 
                     let then_bb = self.new_block();
                     let else_bb = else_block.as_ref().map(|_| self.new_block());
@@ -235,6 +249,40 @@ impl Builder {
                     }
                     self.set_block(join_bb);
                 },
+                HirStmtKind::While { cond, body } => {
+                    let header_bb = self.new_block();
+                    let body_bb = self.new_block();
+                    let exit_bb = self.new_block();
+
+                    self.push_loop(exit_bb, header_bb);
+                    self.terminate(MirTerm::Goto(header_bb));
+
+                    self.set_block(header_bb);
+                    let cond_value = self.evaluate_cond(cond);
+                    self.terminate(MirTerm::If { cond: cond_value, then_bb: body_bb, else_bb: exit_bb });
+
+                    self.set_block(body_bb);
+                    self.lower_into(ctx, func_id, &body.stmts);
+
+                    let current_block = self.get_current_block();
+                    if current_block.term.is_none() {
+                        self.terminate(MirTerm::Goto(header_bb));
+                    }
+
+                    self.set_block(exit_bb);
+                    self.pop_loop();
+                },
+                HirStmtKind::Break => {
+                    // don't know what to do with these dummy values, since it should never happen
+                    // but it needs to be handled
+                    let break_bb = self.loop_context.break_bb.unwrap_or(BlockId(999));
+                    self.terminate(MirTerm::Goto(break_bb));
+                },
+                HirStmtKind::Continue => {
+                    // see break stmt
+                    let continue_bb = self.loop_context.continue_bb.unwrap_or(BlockId(999));
+                    self.terminate(MirTerm::Goto(continue_bb));
+                },
                 HirStmtKind::Return(expr) => {
                     let value = if let Some(expr) = expr {
                         self.lower_expr(&expr)
@@ -246,6 +294,10 @@ impl Builder {
                 HirStmtKind::Expr(expr) => { self.lower_expr(expr); },
                 _ => { todo!() },
             }
+
+            if self.get_current_block().term.is_some() {
+                break;
+            }
         }
     }
 }
@@ -256,6 +308,7 @@ pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) -> MirProgram {
         program: MirProgram { entry: FuncId(0), funcs: Vec::new() },
         current_func: FuncId(0),
         current_block: BlockId(0),
+        loop_context: LoopContext { break_bb: None, continue_bb: None },
 
         def_to_local: vec![None; ctx.defs.len()],
         def_to_func: vec![None; ctx.defs.len()],

@@ -15,10 +15,17 @@ pub struct BlockId(pub usize);
 pub struct LocalId(pub usize);
 
 #[derive(Debug)]
+pub struct LoopContext {
+    pub break_bb: Option<BlockId>,
+    pub continue_bb: Option<BlockId>,
+}
+
+#[derive(Debug)]
 pub struct Builder {
     pub program: MirProgram,
     pub current_func: FuncId,
     pub current_block: BlockId,
+    pub loop_context: LoopContext,
     pub def_to_local: Vec<Option<LocalId>>,
     pub def_to_func: Vec<Option<FuncId>>,
 }

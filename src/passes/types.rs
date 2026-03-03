@@ -147,6 +147,10 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
 
         HirExprKind::Call { callee, args, .. } => {
             let ty = type_expr(ctx, &callee);
+            if ty == Type::Error {
+                return ty;
+            }
+
             match ty {
                 Type::Func { ret, .. } => {
                     // arity & check arg assignability later
