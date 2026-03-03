@@ -29,6 +29,7 @@ pub struct MirProgram {
 
 #[derive(Debug)]
 pub struct MirFunction {
+    pub id: FuncId,
     pub name: Symbol,
     pub params: Vec<LocalId>,
     pub blocks: Vec<BasicBlock>,
@@ -37,6 +38,7 @@ pub struct MirFunction {
 
 #[derive(Debug)]
 pub struct BasicBlock {
+    pub id: BlockId,
     pub stmts: Vec<MirStmt>,
     pub term: Option<MirTerm>,
 }
@@ -66,19 +68,3 @@ pub enum MirValue {
 pub enum BinOp {
     Add,
 }
-
-/*
-program {
-  entry: fn0
-
-  fn0 __module_init() -> nil {
-    bb0:
-      return nil
-  }
-
-  fn1 foo() -> int {
-    bb0:
-      return const 1
-  }
-}
-*/

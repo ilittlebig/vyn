@@ -9,7 +9,7 @@ use crate::passes::{ PassContext, Symbol };
 use crate::passes::hir::{ HirStmt, HirStmtKind, HirExpr, HirExprKind };
 use crate::passes::mir::{
     Builder, MirProgram, MirFunction, MirStmt, MirTerm, BasicBlock, FuncId, BlockId,
-    LocalId, MirValue
+    LocalId, MirValue, MirPrinter,
 };
 
 impl Builder {
@@ -51,7 +51,12 @@ impl Builder {
     fn new_block(&mut self, func_id: FuncId) -> BlockId {
         let func = self.get_current_func();
         let id = BlockId(func.blocks.len());
-        func.blocks.push(BasicBlock { stmts: Vec::new(), term: None });
+        func.blocks.push(BasicBlock {
+            id,
+            stmts: Vec::new(),
+            term: None
+        });
+
         self.set_block(id);
         id
     }
@@ -59,6 +64,7 @@ impl Builder {
     fn new_func(&mut self, name: Symbol) -> FuncId {
         let id = FuncId(self.program.funcs.len());
         self.program.funcs.push(MirFunction {
+            id,
             name,
             params: Vec::new(),
             blocks: Vec::new(),
@@ -100,7 +106,7 @@ impl Builder {
     }
 }
 
-pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) {
+pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) -> MirProgram {
     let __module_init_symbol = ctx.interner.intern("__module_init");
     let mut builder = Builder {
         program: MirProgram { entry: FuncId(0), funcs: Vec::new() },
@@ -113,5 +119,16 @@ pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) {
     builder.lower_into(ctx, entry_id, hir);
     builder.terminate(MirTerm::Return(MirValue::Nil));
 
-    println!("{:#?}", builder);
+    // maybe we should have some arg to show this too?
+    // println!("{:#?}", builder);
+
+    // this should only be here if the user passes --dump-hir
+    let mut mir_printer = MirPrinter {
+        ctx,
+        out: String::new(),
+        indent: 0,
+    };
+    mir_printer.dump_program(&builder.program);
+
+    builder.program
 }

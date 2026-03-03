@@ -19,7 +19,6 @@ mod interner;
 
 mod name_resolve;
 mod type_checking;
-mod lower_mir;
 
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub struct Symbol(usize);
@@ -127,7 +126,7 @@ pub fn run_passes(ast: &Vec<Stmt>) -> Vec<Diagnostic> {
 
     let hir = name_resolve::run(&mut ctx, ast);
     type_checking::run(&mut ctx, &hir);
-    lower_mir::run(&mut ctx, &hir);
+    mir::lower(&mut ctx, &hir);
     // more passes later
 
     ctx.diags
