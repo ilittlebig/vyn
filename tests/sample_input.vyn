@@ -29,11 +29,19 @@ while true {
 }
 */
 
+/*
 while true {
     local a = 1
     local b = 1
     continue
     a = 2
+}
+*/
+
+local function foo(a, b, c) {
+    local aa = 24;
+    a = aa;
+    return 2
 }
 
 /*

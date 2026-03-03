@@ -81,16 +81,29 @@ impl MirPrinter<'_> {
         let name = if let Some(fn_name) = self.ctx.interner.resolve(func.name) {
             fn_name
         } else {
-            // should never happend
+            // should never happen
             "<unknown_symbol>"
         };
 
-        self.line_fmt(format_args!("fn{} {}() {{", func.id.0, name));
+        self.begin_line();
+        self.write_raw_fmt(format_args!("fn{} {}(", func.id.0, name));
+
+        let mut index = 0;
+        for param in &func.params {
+            self.write_raw_fmt(format_args!("l{}", param.0));
+            index += 1;
+            if index != func.params.len() { self.write_raw(", "); }
+        }
+
+        self.write_raw(") {");
+        self.end_line();
+
         self.with_indent(|p| {
             for block in &func.blocks {
                 p.print_block(&block);
             }
         });
+
         self.line("}");
         self.line("");
     }

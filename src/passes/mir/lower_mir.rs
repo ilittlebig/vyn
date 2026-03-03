@@ -202,12 +202,17 @@ impl Builder {
     fn lower_into(&mut self, ctx: &PassContext, func_id: FuncId, stmts: &[HirStmt]) {
         for stmt in stmts {
             match &stmt.kind {
-                HirStmtKind::FuncDecl { def_id, init, .. } => {
+                HirStmtKind::FuncDecl { def_id, init, params, .. } => {
                     let start_block_id = self.current_block;
 
                     let name = ctx.defs[def_id.0].name;
                     let new_func_id = self.new_func(name);
                     self.def_to_func[def_id.0] = Some(new_func_id);
+
+                    for param in params {
+                        let local_id = self.new_local(&param.def_id);
+                        self.get_current_func().params.push(local_id);
+                    }
 
                     self.lower_into(ctx, new_func_id, &init.stmts);
                     let current_block = self.get_current_block();
