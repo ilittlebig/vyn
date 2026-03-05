@@ -7,6 +7,7 @@
 
 use std::fs;
 
+mod tools;
 mod frontend;
 mod passes;
 mod diagnostics;
@@ -17,5 +18,7 @@ fn main() {
     let filename = "sample_input.vyn";
     let contents = fs::read_to_string("./tests/sample_input.vyn")
         .expect("should have been able to read the file");
+
+    tools::cli::run();
     driver::drive(filename, contents);
 }

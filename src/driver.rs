@@ -14,8 +14,6 @@ pub fn drive(filename: &str, input: String) {
     let lexer_output = lexer::tokenize(filename.to_string(), input);
     let (stmts, parse_errors) = parser::parse_program(lexer_output.file.clone(), lexer_output.tokens);
 
-    //println!("stmts: {:?}", stmts);
-
     let mut emitter = Emitter::stderr();
     for e in parse_errors {
         let diagnostic: Diagnostic = e.into();
