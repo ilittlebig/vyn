@@ -7,15 +7,19 @@
 
 use std::env;
 
+mod emitter;
 mod error;
 mod args;
 mod parser;
 
 pub use error::CliError;
-pub use args::{ CliCommand, CompileOptions, RunArgs, Target, Mode };
+pub use emitter::{ CliDiagnostic, print_error };
+pub use args::{ CliCommand, CompileOptions, RunArgs, Target, Mode, CommandKind };
 
 pub fn run() -> Result<CliCommand, CliError> {
-    let mut iterator = env::args().skip(1);
-    let command = parser::parse(iterator);
-    Ok(command)
+    let iterator = env::args().skip(1);
+    match parser::parse(iterator) {
+        Ok(command) => Ok(command),
+        Err(e) => Err(e)?
+    }
 }

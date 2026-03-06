@@ -8,9 +8,14 @@
 use crate::passes;
 use crate::frontend::lexer;
 use crate::frontend::parser;
+use crate::tools::cli::CliCommand;
 use crate::diagnostics::{ Emitter, Diagnostic };
 
-pub fn drive(filename: &str, input: String) {
+pub fn drive(command: CliCommand, filename: &str, input: String) {
+    let opts = command.compile() else {
+        return;
+    };
+
     let lexer_output = lexer::tokenize(filename.to_string(), input);
     let (stmts, parse_errors) = parser::parse_program(lexer_output.file.clone(), lexer_output.tokens);
 
