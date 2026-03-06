@@ -28,5 +28,6 @@ fn main() {
             return;
         },
     };
+
     driver::drive(command, filename, contents);
 }

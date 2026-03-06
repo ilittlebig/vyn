@@ -1,11 +1,13 @@
+mod render;
 mod emitter;
 mod span;
 
 mod from_lexer;
 mod from_parser;
 
-pub use self::emitter::Emitter;
-pub use self::emitter::Diagnostic;
+pub use render::*;
+pub use emitter::Emitter;
+pub use emitter::Diagnostic;
 
-pub use self::span::Span;
-pub use self::span::Spanned;
+pub use span::Span;
+pub use span::Spanned;

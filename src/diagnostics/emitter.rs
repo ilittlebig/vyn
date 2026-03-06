@@ -9,11 +9,8 @@ use std::borrow::Cow;
 use std::io::{ self, Write };
 use termcolor::{ Color, ColorChoice, ColorSpec, StandardStream, WriteColor };
 
-use crate::diagnostics::Span;
 use crate::source::SourceFile;
-
-#[derive(Debug, Clone, Copy)]
-pub enum Severity { Error, Warning, Note }
+use crate::diagnostics::{ self, Span, Severity };
 
 #[derive(Debug)]
 pub struct Diagnostic {
@@ -52,27 +49,23 @@ impl Emitter {
         let (line, col) = source_file.line_col(span.start);
         let (line_text, line_start, line_end) = source_file.line_span(span.start);
 
-        out.set_color(&severity_spec(diagnostic.severity))?;
-        write!(out, "{}", match diagnostic.severity {
-            Severity::Error => "error",
-            Severity::Warning => "warning",
-            Severity::Note => "note",
-        })?;
+        out.set_color(&diagnostics::severity_spec(diagnostic.severity))?;
+        write!(out, "{}", diagnostics::severity_label(diagnostic.severity))?;
 
         out.reset()?;
         writeln!(out, ": {}", diagnostic.message)?;
 
         let w = (line + 1).to_string().len();
-        out.set_color(&gutter_spec())?;
+        out.set_color(&diagnostics::gutter_spec())?;
         write!(out, "{:>w$} --> ", "", w = w - 1)?;
         out.reset()?;
         writeln!(out, "{}:{}:{}", source_file.name, line + 1, col + 1)?;
 
-        out.set_color(&gutter_spec())?;
+        out.set_color(&diagnostics::gutter_spec())?;
         writeln!(out, "{:>w$} |", "", w = w)?;
         out.reset()?;
 
-        out.set_color(&gutter_spec())?;
+        out.set_color(&diagnostics::gutter_spec())?;
         write!(out, "{:>w$} |", line + 1, w = w)?;
         out.reset()?;
 
@@ -88,33 +81,15 @@ impl Emitter {
             "~".repeat(width.saturating_sub(1))
         );
 
-        out.set_color(&gutter_spec())?;
+        out.set_color(&diagnostics::gutter_spec())?;
         write!(out, "{:>w$} | ", "", w = w)?;
         out.reset()?;
 
-        out.set_color(&severity_spec(diagnostic.severity))?;
+        out.set_color(&diagnostics::severity_spec(diagnostic.severity))?;
         writeln!(out, "{}", marker)?;
         out.reset()?;
         writeln!(out, "")?;
 
         Ok(())
     }
-}
-
-fn severity_spec(severity: Severity) -> ColorSpec {
-    let mut spec = ColorSpec::new();
-    spec.set_bold(true);
-    match severity {
-        Severity::Error => { spec.set_fg(Some(Color::Red)); }
-        Severity::Warning => { spec.set_fg(Some(Color::Yellow)); }
-        Severity::Note => { spec.set_fg(Some(Color::Cyan)); }
-    }
-    spec
-}
-
-fn gutter_spec() -> ColorSpec {
-    let mut spec = ColorSpec::new();
-    spec.set_bold(true);
-    spec.set_fg(Some(Color::Rgb(0, 0, 245)));
-    spec
 }
