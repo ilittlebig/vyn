@@ -28,7 +28,7 @@ pub enum Target {
 pub struct CompileOptions {
     pub mode: Mode,
     pub target: Target,
-    pub dump_hir: bool,
+    pub dump_mir: bool,
 }
 
 #[derive(Debug)]

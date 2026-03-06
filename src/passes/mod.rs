@@ -7,9 +7,11 @@
 
 use std::collections::HashMap;
 
+use crate::passes::mir::MirPrinter;
+use crate::tools::cli::CompileOptions;
+use crate::passes::interner::Interner;
 use crate::passes::types::{ Type, TypeDef, TypeDefKind, TypeId, BuiltinTypes };
 use crate::frontend::parser::{ TypeRef, Stmt };
-use crate::passes::interner::Interner;
 use crate::diagnostics::{ Span, Diagnostic };
 
 mod hir;
@@ -121,13 +123,22 @@ impl PassContext {
     }
 }
 
-pub fn run_passes(ast: &Vec<Stmt>) -> Vec<Diagnostic> {
+pub fn run_passes(ast: &Vec<Stmt>, opts: &CompileOptions) -> Vec<Diagnostic> {
     let mut ctx = PassContext::new();
 
     let hir = name_resolve::run(&mut ctx, ast);
     type_checking::run(&mut ctx, &hir);
-    mir::lower(&mut ctx, &hir);
-    // more passes later
+
+    let mir = mir::lower(&mut ctx, &hir);
+    if opts.dump_mir {
+        let mut mir_printer = MirPrinter {
+            program: &mir,
+            ctx: &ctx,
+            out: String::new(),
+            indent: 0,
+        };
+        mir_printer.dump_program();
+    }
 
     ctx.diags
 }

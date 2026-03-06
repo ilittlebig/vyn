@@ -12,7 +12,7 @@ use crate::tools::cli::CliCommand;
 use crate::diagnostics::{ Emitter, Diagnostic };
 
 pub fn drive(command: CliCommand, filename: &str, input: String) {
-    let opts = command.compile() else {
+    let Some(opts) = command.compile() else {
         return;
     };
 
@@ -30,7 +30,7 @@ pub fn drive(command: CliCommand, filename: &str, input: String) {
         let _ = emitter.emit(&lexer_output.file, &diagnostic);
     }
 
-    let pass_diagnostics = passes::run_passes(&stmts);
+    let pass_diagnostics = passes::run_passes(&stmts, &opts);
     for e in pass_diagnostics {
         let diagnostic: Diagnostic = e.into();
         let _ = emitter.emit(&lexer_output.file, &diagnostic);

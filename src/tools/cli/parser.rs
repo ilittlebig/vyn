@@ -25,7 +25,7 @@ impl Default for ParsedCli {
             compile: CompileOptions {
                 mode: Mode::Debug,
                 target: Target::Native,
-                dump_hir: false,
+                dump_mir: false,
             },
             path: None,
             program_args: Vec::new(),
@@ -85,7 +85,7 @@ impl<I> Parser<I> where I: Iterator<Item = String> {
     fn parse_arg(&mut self) -> Result<(), CliError> {
         let Some(token) = self.next() else { return Ok(()); };
         match token.as_str() {
-            "--dump-hir" => self.out.compile.dump_hir = true,
+            "--dump-mir" => self.out.compile.dump_mir = true,
             "--mode" => self.parse_mode()?,
             "--target" => self.parse_target()?,
             _ => Err(CliError::UnexpectedFlag { flag: token })?,

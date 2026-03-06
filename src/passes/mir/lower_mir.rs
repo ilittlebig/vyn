@@ -335,17 +335,5 @@ pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) -> MirProgram {
     builder.lower_into(ctx, entry_id, hir);
     builder.terminate(MirTerm::Return(MirValue::Nil));
 
-    // maybe we should have some arg to show this too?
-    // println!("{:#?}", builder);
-
-    // this should only be here if the user passes --dump-hir
-    let mut mir_printer = MirPrinter {
-        program: &builder.program,
-        ctx,
-        out: String::new(),
-        indent: 0,
-    };
-    mir_printer.dump_program();
-
     builder.program
 }
