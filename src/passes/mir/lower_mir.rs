@@ -238,6 +238,13 @@ impl Builder {
                 self.emit_stmt(MirStmt::Index { dst: temp_id, base, index });
                 MirValue::Local(temp_id)
             },
+            HirExprKind::Field { base, name } => {
+                let base = self.lower_expr(base);
+                let temp_id = self.new_temp();
+
+                self.emit_stmt(MirStmt::Field { dst: temp_id, base, name: *name });
+                MirValue::Local(temp_id)
+            },
             _ => MirValue::ConstBool(false),
         }
     }

@@ -139,6 +139,16 @@ impl<'a> MirPrinter<'a> {
                 self.print_value(index);
                 self.end_line();
             },
+            MirStmt::Field { dst, base, name } => {
+                let name = self.ctx.interner.resolve(*name).unwrap_or("<unknown field>");
+                self.begin_line();
+                self.write_raw_fmt(format_args!("l{} = ", dst.0));
+                self.write_raw("field ");
+                self.print_value(base);
+                self.write_raw(", ");
+                self.write_raw_fmt(format_args!("{}", name));
+                self.end_line();
+            },
             MirStmt::BinOp { dst, lhs, op, rhs } => {
                 self.begin_line();
                 self.write_raw_fmt(format_args!("l{} = ", dst.0));
