@@ -109,7 +109,9 @@ impl PassContext {
     }
 
     fn pop_scope(&mut self) {
-        let scope = self.scope(self.current_scope).parent.expect("pop root scope");
+        let scope = self.scope(self.current_scope)
+            .parent
+            .expect("pop root scope");
         self.current_scope = scope;
     }
 
@@ -131,12 +133,7 @@ pub fn run_passes(ast: &Vec<Stmt>, opts: &CompileOptions) -> Vec<Diagnostic> {
 
     let mir = mir::lower(&mut ctx, &hir);
     if opts.dump_mir {
-        let mut mir_printer = MirPrinter {
-            program: &mir,
-            ctx: &ctx,
-            out: String::new(),
-            indent: 0,
-        };
+        let mut mir_printer = MirPrinter::new(&mut ctx, &mir);
         mir_printer.dump_program();
     }
 

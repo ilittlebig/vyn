@@ -20,7 +20,11 @@ pub struct MirPrinter<'a> {
     pub indent: usize,
 }
 
-impl MirPrinter<'_> {
+impl<'a> MirPrinter<'a> {
+    pub fn new(ctx: &'a PassContext, program: &'a MirProgram) -> Self {
+        Self { program, ctx, out: String::new(), indent: 0 }
+    }
+
     fn indent(&mut self) {
         let n = self.indent * 4;
         for i in 0..n {

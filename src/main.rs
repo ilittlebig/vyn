@@ -24,7 +24,7 @@ fn main() {
     let command = match tools::cli::run() {
         Ok(command) => command,
         Err(e) => {
-            tools::cli::print_error(CliDiagnostic::error(e.to_string()));
+            let _ = tools::cli::print_error(CliDiagnostic::error(e.to_string()));
             return;
         },
     };
