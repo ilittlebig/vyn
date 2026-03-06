@@ -5,8 +5,8 @@
  * Created: 2026-02-25
  **/
 
-use crate::frontend::parser::TypeRef;
 use crate::frontend::lexer::Operator;
+use crate::frontend::parser::{ TypeRef, UnaryOp };
 
 use crate::diagnostics::{ Span, Diagnostic };
 use crate::passes::{ PassContext, Symbol, DefId };
@@ -72,6 +72,14 @@ fn emit_binop_type_error(ctx: &mut PassContext, lhs_ty: &Type, rhs_ty: &Type, op
     ctx.diags.push(Diagnostic::error(msg, span));
 }
 
+fn emit_unary_type_error(ctx: &mut PassContext, rhs_ty: &Type, span: Span) {
+    let msg = format!(
+        "expected a number, got '{}'",
+        fmt_type(ctx, rhs_ty)
+    );
+    ctx.diags.push(Diagnostic::error(msg, span));
+}
+
 // works for flat types, will need to revisit later
 pub fn assignable(t1: &Type, t2: &Type) -> bool {
     if *t1 == Type::Any || *t2 == Type::Any {
@@ -127,6 +135,23 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
                     Type::Named(ctx.builtin_types.bool)
                 },
                 _ => lhs_ty,
+            }
+        },
+
+        HirExprKind::Unary { op, rhs } => {
+            let rhs_ty = type_expr(ctx, &rhs);
+            match op {
+                UnaryOp::Neg | UnaryOp::Plus => {
+                    let is_rhs_ok = is_numeric_type(ctx, &rhs_ty) || rhs_ty == Type::Any;
+                    if !is_rhs_ok {
+                        emit_unary_type_error(ctx, &rhs_ty, expr.span);
+                        return Type::Error;
+                    }
+                    rhs_ty
+                },
+                UnaryOp::Not => {
+                    Type::Named(ctx.builtin_types.bool)
+                },
             }
         },
 

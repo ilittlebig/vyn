@@ -55,7 +55,8 @@ pub struct BasicBlock {
 #[derive(Debug)]
 pub enum MirStmt {
     Assign { dst: MirPlace, src: MirValue },
-    BinOp { dst: LocalId, op: BinOp, lhs: MirValue, rhs: MirValue },
+    BinOp { dst: LocalId, op: MirBinOp, lhs: MirValue, rhs: MirValue },
+    UnOp { dst: LocalId, op: MirUnOp, rhs: MirValue },
     Call { dst: LocalId, callee: MirValue, args: Vec<MirValue> },
 }
 
@@ -82,19 +83,14 @@ pub enum MirPlace {
 }
 
 #[derive(Debug)]
-pub enum BinOp {
+pub enum MirBinOp {
     // arithmetic
-    Add,
-    Minus,
-    Division,
-    Multiplication,
-    Modulus,
-
+    Add, Sub, Div, Mul, Mod,
     // comparison
-    Equal,
-    NotEqual,
-    LessThan,
-    LessThanEqual,
-    GreaterThan,
-    GreaterThanEqual,
+    Eq, Ne, Lt, Lte, Gt, Gte,
+    // boolean
+    And, Or
 }
+
+#[derive(Debug)]
+pub enum MirUnOp { Neg, Plus, Not }

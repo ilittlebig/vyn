@@ -10,7 +10,7 @@ use std::fmt::{ self, Write };
 use crate::passes::PassContext;
 use crate::passes::mir::{
     MirProgram, MirFunction, MirStmt, MirTerm, BasicBlock,
-    MirValue, BinOp, MirPlace
+    MirValue, MirBinOp, MirPlace, MirUnOp
 };
 
 pub struct MirPrinter<'a> {
@@ -133,10 +133,18 @@ impl<'a> MirPrinter<'a> {
             MirStmt::BinOp { dst, lhs, op, rhs } => {
                 self.begin_line();
                 self.write_raw_fmt(format_args!("l{} = ", dst.0));
-                self.print_op(op);
+                self.print_bin_op(op);
                 self.write_raw(" ");
                 self.print_value(lhs);
                 self.write_raw(", ");
+                self.print_value(rhs);
+                self.end_line();
+            },
+            MirStmt::UnOp { dst, op, rhs } => {
+                self.begin_line();
+                self.write_raw_fmt(format_args!("l{} = ", dst.0));
+                self.print_un_op(op);
+                self.write_raw(" ");
                 self.print_value(rhs);
                 self.end_line();
             },
@@ -215,23 +223,33 @@ impl<'a> MirPrinter<'a> {
         }
     }
 
-    fn print_op(&mut self, op: &BinOp) {
+    fn print_bin_op(&mut self, op: &MirBinOp) {
         match op {
             // arithmetic
-            BinOp::Add => self.write_raw("add"),
-            BinOp::Minus => self.write_raw("sub"),
-            BinOp::Division => self.write_raw("div"),
-            BinOp::Multiplication => self.write_raw("mul"),
-            BinOp::Modulus => self.write_raw("mod"),
+            MirBinOp::Add => self.write_raw("add"),
+            MirBinOp::Sub => self.write_raw("sub"),
+            MirBinOp::Div => self.write_raw("div"),
+            MirBinOp::Mul => self.write_raw("mul"),
+            MirBinOp::Mod => self.write_raw("mod"),
 
             // comparison
-            BinOp::Equal => self.write_raw("eq"),
-            BinOp::NotEqual => self.write_raw("neq"),
-            BinOp::LessThan => self.write_raw("lt"),
-            BinOp::LessThanEqual => self.write_raw("lte"),
-            BinOp::GreaterThan => self.write_raw("gt"),
-            BinOp::GreaterThanEqual => self.write_raw("gte"),
-            _ => self.write_raw("<unimplemented operator>"),
+            MirBinOp::Eq => self.write_raw("eq"),
+            MirBinOp::Ne => self.write_raw("neq"),
+            MirBinOp::Lt => self.write_raw("lt"),
+            MirBinOp::Lte => self.write_raw("lte"),
+            MirBinOp::Gt => self.write_raw("gt"),
+            MirBinOp::Gte => self.write_raw("gte"),
+            _ => self.write_raw("<unimplemented binary operator>"),
+        }
+    }
+
+    fn print_un_op(&mut self, op: &MirUnOp) {
+        match op {
+            // unary
+            MirUnOp::Neg => self.write_raw("neg"),
+            MirUnOp::Plus => self.write_raw("plus"),
+            MirUnOp::Not => self.write_raw("not"),
+            _ => self.write_raw("<unimplemented unary operator>"),
         }
     }
 

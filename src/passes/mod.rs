@@ -12,7 +12,7 @@ use crate::tools::cli::CompileOptions;
 use crate::passes::interner::Interner;
 use crate::passes::types::{ Type, TypeDef, TypeDefKind, TypeId, BuiltinTypes };
 use crate::frontend::parser::{ TypeRef, Stmt };
-use crate::diagnostics::{ Span, Diagnostic };
+use crate::diagnostics::{ Span, Diagnostic, Severity };
 
 mod hir;
 mod mir;
@@ -115,6 +115,10 @@ impl PassContext {
         self.current_scope = scope;
     }
 
+    fn has_errors(&self) -> bool {
+        self.diags.iter().any(|d| matches!(d.severity, Severity::Error))
+    }
+
     //
     fn push_builtin_type(&mut self, name: &'static str) -> TypeId {
         let symbol = self.interner.intern(name);
@@ -129,7 +133,10 @@ pub fn run_passes(ast: &Vec<Stmt>, opts: &CompileOptions) -> Vec<Diagnostic> {
     let mut ctx = PassContext::new();
 
     let hir = name_resolve::run(&mut ctx, ast);
+    if ctx.has_errors() { return ctx.diags; }
+
     type_checking::run(&mut ctx, &hir);
+    if ctx.has_errors() { return ctx.diags; }
 
     let mir = mir::lower(&mut ctx, &hir);
     if opts.dump_mir {

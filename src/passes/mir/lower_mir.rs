@@ -6,11 +6,12 @@
  **/
 
 use crate::frontend::lexer::Operator;
+use crate::frontend::parser::UnaryOp;
 use crate::passes::{ PassContext, Symbol, DefId };
 use crate::passes::hir::{ HirStmt, HirStmtKind, HirExpr, HirExprKind };
 use crate::passes::mir::{
     Builder, MirProgram, MirFunction, MirStmt, MirTerm, BasicBlock, FuncId, BlockId,
-    LocalId, MirValue, MirPrinter, BinOp, MirPlace, LoopContext
+    LocalId, MirValue, MirPrinter, MirBinOp, MirUnOp, MirPlace, LoopContext
 };
 
 impl Builder {
@@ -104,12 +105,23 @@ impl Builder {
             HirExprKind::Binary { lhs, op, rhs } => {
                 let lhs = self.lower_expr(&lhs);
                 let rhs = self.lower_expr(&rhs);
-
                 let temp_id = self.new_temp();
+
                 self.emit_stmt(MirStmt::BinOp {
                     dst: temp_id,
-                    op: self.lower_op(&op),
+                    op: self.lower_binary_op(&op),
                     lhs,
+                    rhs
+                });
+                MirValue::Local(temp_id)
+            },
+            HirExprKind::Unary { op, rhs } => {
+                let rhs = self.lower_expr(&rhs);
+                let temp_id = self.new_temp();
+
+                self.emit_stmt(MirStmt::UnOp {
+                    dst: temp_id,
+                    op: self.lower_unary_op(&op),
                     rhs
                 });
                 MirValue::Local(temp_id)
@@ -118,23 +130,38 @@ impl Builder {
         }
     }
 
-    fn lower_op(&self, op: &Operator) -> BinOp {
+    fn lower_binary_op(&self, op: &Operator) -> MirBinOp {
         match op {
             // arithmetic
-            Operator::Plus => BinOp::Add,
-            Operator::Minus => BinOp::Minus,
-            Operator::Division => BinOp::Division,
-            Operator::Multiplication => BinOp::Multiplication,
-            Operator::Modulus => BinOp::Modulus,
+            Operator::Plus => MirBinOp::Add,
+            Operator::Minus => MirBinOp::Sub,
+            Operator::Division => MirBinOp::Div,
+            Operator::Multiplication => MirBinOp::Mul,
+            Operator::Modulus => MirBinOp::Mod,
 
             // comparison
-            Operator::Equal => BinOp::Equal,
-            Operator::NotEqual => BinOp::NotEqual,
-            Operator::LessThan => BinOp::LessThan,
-            Operator::LessThanEqual => BinOp::LessThanEqual,
-            Operator::GreaterThan => BinOp::GreaterThan,
-            Operator::GreaterThanEqual => BinOp::GreaterThanEqual,
-            _ => { todo!(); }
+            Operator::Equal => MirBinOp::Eq,
+            Operator::NotEqual => MirBinOp::Ne,
+            Operator::LessThan => MirBinOp::Lt,
+            Operator::LessThanEqual => MirBinOp::Lte,
+            Operator::GreaterThan => MirBinOp::Gt,
+            Operator::GreaterThanEqual => MirBinOp::Gte,
+
+            // boolean
+            Operator::And => MirBinOp::And,
+            Operator::Or => MirBinOp::Or,
+
+            // unary
+            Operator::Not => unreachable!("parser produced binary `!` (Not), this should be unary only"),
+        }
+    }
+
+    fn lower_unary_op(&self, op: &UnaryOp) -> MirUnOp {
+        match op {
+            UnaryOp::Neg => MirUnOp::Neg,
+            UnaryOp::Plus => MirUnOp::Plus,
+            UnaryOp::Not => MirUnOp::Not,
+
         }
     }
 
@@ -170,10 +197,18 @@ impl Builder {
             HirExprKind::Binary { lhs, op, rhs } => {
                 let lhs = self.lower_expr(lhs);
                 let rhs = self.lower_expr(rhs);
-
                 let temp_id = self.new_temp();
-                let op = self.lower_op(op);
+
+                let op = self.lower_binary_op(op);
                 self.emit_stmt(MirStmt::BinOp { dst: temp_id, lhs, op, rhs });
+                MirValue::Local(temp_id)
+            },
+            HirExprKind::Unary { op, rhs } => {
+                let rhs = self.lower_expr(rhs);
+                let temp_id = self.new_temp();
+
+                let op = self.lower_unary_op(op);
+                self.emit_stmt(MirStmt::UnOp { dst: temp_id, op, rhs });
                 MirValue::Local(temp_id)
             },
             HirExprKind::Call { callee, args } => {

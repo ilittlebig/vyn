@@ -38,14 +38,9 @@ while true {
 }
 */
 
-local function foo(a, b, c) {
-    local aa = 24;
-    {
-        a = aa;
-        { aa = a }
-    }
-    local bb = 43;
-    return 2
+local function foo(a: bool, b, c) {
+    local aa: int = 0
+    if -aa != 0 {}
 }
 foo()
 

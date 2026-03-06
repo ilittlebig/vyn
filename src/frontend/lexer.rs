@@ -60,7 +60,11 @@ impl Keyword {
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum Operator {
     // arithmetic
-    Plus, Minus, Division, Multiplication, Modulus,
+    Plus,
+    Minus,
+    Division,
+    Multiplication,
+    Modulus,
 
     // unary/boolean
     Not,
