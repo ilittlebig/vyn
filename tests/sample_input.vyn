@@ -38,11 +38,16 @@ while true {
 }
 */
 
+local a = 0;
+local b = a[123]
+
+/*
 local function foo(a: bool, b, c) {
-    local aa: int = 0
+    local aa: int = (0+0)*2
     if -aa != 0 {}
 }
 foo()
+*/
 
 /*
 local function foo() {

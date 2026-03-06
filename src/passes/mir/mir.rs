@@ -58,6 +58,7 @@ pub enum MirStmt {
     BinOp { dst: LocalId, op: MirBinOp, lhs: MirValue, rhs: MirValue },
     UnOp { dst: LocalId, op: MirUnOp, rhs: MirValue },
     Call { dst: LocalId, callee: MirValue, args: Vec<MirValue> },
+    Index { dst: LocalId, base: MirValue, index: MirValue },
 }
 
 #[derive(Debug)]

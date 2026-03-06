@@ -230,6 +230,14 @@ impl Builder {
                 self.emit_stmt(MirStmt::Assign { dst: target_place, src: rhs.clone() });
                 rhs
             },
+            HirExprKind::Index { base, index } => {
+                let base = self.lower_expr(base);
+                let index = self.lower_expr(index);
+                let temp_id = self.new_temp();
+
+                self.emit_stmt(MirStmt::Index { dst: temp_id, base, index });
+                MirValue::Local(temp_id)
+            },
             _ => MirValue::ConstBool(false),
         }
     }
