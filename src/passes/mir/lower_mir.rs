@@ -5,16 +5,19 @@
  * Created: 2026-03-01
  **/
 
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+
 use crate::frontend::lexer::Operator;
 use crate::frontend::parser::UnaryOp;
 use crate::passes::{ PassContext, Symbol, DefId };
-use crate::passes::hir::{ HirStmt, HirStmtKind, HirExpr, HirExprKind };
+use crate::passes::hir::{ HirParam, HirStmt, HirStmtKind, HirExpr, HirExprKind, HirBlock };
 use crate::passes::mir::{
     Builder, MirProgram, MirFunction, MirStmt, MirTerm, BasicBlock, FuncId, BlockId,
-    LocalId, MirValue, MirPrinter, MirBinOp, MirUnOp, MirPlace, LoopContext
+    LocalId, MirValue, MirPrinter, MirBinOp, MirUnOp, MirPlace, LoopContext, Capture
 };
 
-impl Builder {
+impl Builder<'_> {
     fn get_current_func(&mut self) -> &mut MirFunction {
         &mut self.program.funcs[self.current_func.0]
     }
@@ -61,6 +64,8 @@ impl Builder {
             id
         };
 
+        let current_func_id = FuncId(self.current_func.0);
+        self.def_to_owner[def_id.0] = Some(current_func_id);
         self.def_to_local[def_id.0] = Some(id);
         id
     }
@@ -91,6 +96,9 @@ impl Builder {
             params: Vec::new(),
             blocks: Vec::new(),
             locals: 0,
+
+            captures: Vec::new(),
+            capture_map: HashMap::new(),
         });
 
         self.set_func(id);
@@ -128,6 +136,55 @@ impl Builder {
             },
             _ => todo!() // no idea
         }
+    }
+
+    fn ensure_capture_slot(&mut self, def_id: &DefId, func_id: FuncId) -> usize {
+        let func = &mut self.program.funcs[func_id.0];
+        match func.capture_map.entry(*def_id) {
+            Entry::Occupied(e) => *e.get(),
+            Entry::Vacant(v) => {
+                let s = func.captures.len();
+                func.captures.push(Capture::ByRef { def_id: *def_id, slot: s });
+                v.insert(s);
+                s
+            }
+        }
+    }
+
+    fn emit_closure_value(&mut self, func_id: FuncId) -> MirValue {
+        let captures = self.program.funcs[func_id.0]
+            .captures
+            .clone();
+        let temp_id = self.new_temp();
+        self.emit_stmt(MirStmt::MakeClosure { dst: temp_id, func: func_id, env: captures });
+        MirValue::Local(temp_id)
+    }
+
+    fn ensure_terminated(&mut self) {
+        let current_block = self.get_current_block();
+        if current_block.term.is_none() {
+            self.terminate(MirTerm::Return(MirValue::Nil));
+        }
+    }
+
+    fn lower_func_literal(&mut self, name: Symbol, params: &[HirParam], body: &HirBlock) -> FuncId {
+        let saved_func = self.current_func;
+        let saved_block = self.current_block;
+        let func_id = self.new_func(name);
+
+        for param in params {
+            let local_id = self.new_local(&param.def_id);
+            self.get_current_func().params.push(local_id);
+        }
+
+        self.lower_into(func_id, &body.stmts);
+        self.ensure_terminated();
+
+        //let captures = self.get_current_func().captures.clone();
+
+        self.set_func(saved_func);
+        self.set_block(saved_block);
+        func_id
     }
 
     fn lower_binary_op(&self, op: &Operator) -> MirBinOp {
@@ -168,14 +225,24 @@ impl Builder {
     fn lower_place(&mut self, expr: &HirExpr) -> MirPlace {
         match &expr.kind {
             HirExprKind::VarRef { def: def_id } => {
-                let local_id = if let Some(id) = self.def_to_local[def_id.0] {
-                    id
-                } else {
-                    // what do we do here, this has to error or something
-                    // right now i just use a dummy value
-                    LocalId(999)
+                let Some(func_id) = self.def_to_owner[def_id.0] else {
+                    unreachable!("VarRef without owner: {:?}", def_id);
                 };
-                MirPlace::Local(local_id)
+
+                let current_func_id = self.get_current_func().id;
+                if current_func_id == func_id {
+                    let local_id = if let Some(id) = self.def_to_local[def_id.0] {
+                        id
+                    } else {
+                        // what do we do here, this has to error or something
+                        // right now i just use a dummy value
+                        LocalId(999)
+                    };
+                    MirPlace::Local(local_id)
+                } else {
+                    let slot = self.ensure_capture_slot(def_id, current_func_id);
+                    MirPlace::Upvalue(slot)
+                }
             }
             _ => todo!(),
         }
@@ -186,13 +253,37 @@ impl Builder {
             HirExprKind::Int(v) => MirValue::ConstInt(*v),
             HirExprKind::Double(v) => MirValue::ConstDouble(*v),
             HirExprKind::VarRef { def: def_id } => {
-                if let Some(id) = self.def_to_local[def_id.0] {
-                    return MirValue::Local(id);
-                }
-                if let Some(id) = self.def_to_func[def_id.0] {
-                    return MirValue::Func(id);
+                let Some(func_id) = self.def_to_owner[def_id.0] else {
+                    unreachable!("VarRef without owner: {:?}", def_id);
+                };
+
+                let current_func_id = self.get_current_func().id;
+                if func_id != current_func_id {
+                    let slot = self.ensure_capture_slot(def_id, current_func_id);
+                    let temp_id = self.new_temp();
+                    self.emit_stmt(MirStmt::LoadUpvalue { dst: temp_id, slot });
+                    return MirValue::Local(temp_id);
+                } else {
+                    if let Some(id) = self.def_to_local[def_id.0] {
+                        return MirValue::Local(id);
+                    }
+                    if let Some(id) = self.def_to_func[def_id.0] {
+                        return MirValue::Func(id);
+                    }
                 }
                 MirValue::Nil
+            },
+            HirExprKind::Func(func) => {
+                let captures = self.program.funcs[self.current_func.0]
+                    .captures
+                    .clone();
+
+                // need to do something about the anon name here
+                let func_id = self.lower_func_literal(Symbol(999), &func.params, &func.body);
+
+                let temp_id = self.new_temp();
+                self.emit_stmt(MirStmt::MakeClosure { dst: temp_id, func: func_id, env: captures });
+                MirValue::Local(temp_id)
             },
             HirExprKind::Binary { lhs, op, rhs } => {
                 let lhs = self.lower_expr(lhs);
@@ -225,9 +316,14 @@ impl Builder {
                 MirValue::Local(temp_id)
             },
             HirExprKind::Assign { target, value } => {
-                let target_place = self.lower_place(target);
+                let dst = self.lower_place(target);
                 let rhs = self.lower_expr(value);
-                self.emit_stmt(MirStmt::Assign { dst: target_place, src: rhs.clone() });
+
+                let src = rhs.clone();
+                match dst {
+                    MirPlace::Local(_) => self.emit_stmt(MirStmt::Assign { dst, src }),
+                    MirPlace::Upvalue(slot) => self.emit_stmt(MirStmt::StoreUpvalue { slot, src: Box::new(src) }),
+                }
                 rhs
             },
             HirExprKind::Index { base, index } => {
@@ -249,29 +345,17 @@ impl Builder {
         }
     }
 
-    fn lower_into(&mut self, ctx: &PassContext, func_id: FuncId, stmts: &[HirStmt]) {
+    fn lower_into(&mut self, func_id: FuncId, stmts: &[HirStmt]) {
         for stmt in stmts {
             match &stmt.kind {
                 HirStmtKind::FuncDecl { def_id, init, params, .. } => {
-                    let start_block_id = self.current_block;
-
-                    let name = ctx.defs[def_id.0].name;
-                    let new_func_id = self.new_func(name);
+                    let name = self.ctx.defs[def_id.0].name;
+                    let new_func_id = self.lower_func_literal(name, params, init);
                     self.def_to_func[def_id.0] = Some(new_func_id);
 
-                    for param in params {
-                        let local_id = self.new_local(&param.def_id);
-                        self.get_current_func().params.push(local_id);
-                    }
-
-                    self.lower_into(ctx, new_func_id, &init.stmts);
-                    let current_block = self.get_current_block();
-                    if current_block.term.is_none() {
-                        self.terminate(MirTerm::Return(MirValue::Nil));
-                    }
-
-                    self.set_func(func_id);
-                    self.set_block(start_block_id);
+                    let closure_value = self.emit_closure_value(new_func_id);
+                    let local_id = self.new_local(def_id);
+                    self.emit_stmt(MirStmt::Assign { dst: MirPlace::Local(local_id), src: closure_value });
                 },
                 HirStmtKind::Decl { def_id, init } => {
                     let rhs = if let Some(expr) = init {
@@ -294,12 +378,12 @@ impl Builder {
                     self.terminate(MirTerm::If { cond: cond_value, then_bb, else_bb: else_target });
 
                     self.set_block(then_bb);
-                    self.lower_into(ctx, func_id, &then_block.stmts);
+                    self.lower_into(func_id, &then_block.stmts);
                     self.terminate(MirTerm::Goto(join_bb));
 
                     if let Some(else_block) = else_block {
                         self.set_block(else_target);
-                        self.lower_into(ctx, func_id, &else_block.stmts);
+                        self.lower_into(func_id, &else_block.stmts);
                         self.terminate(MirTerm::Goto(join_bb));
                     }
                     self.set_block(join_bb);
@@ -317,7 +401,7 @@ impl Builder {
                     self.terminate(MirTerm::If { cond: cond_value, then_bb: body_bb, else_bb: exit_bb });
 
                     self.set_block(body_bb);
-                    self.lower_into(ctx, func_id, &body.stmts);
+                    self.lower_into(func_id, &body.stmts);
 
                     let current_block = self.get_current_block();
                     if current_block.term.is_none() {
@@ -333,7 +417,7 @@ impl Builder {
                     self.terminate(MirTerm::Goto(block_bb));
 
                     self.set_block(block_bb);
-                    self.lower_into(ctx, func_id, &block.stmts);
+                    self.lower_into(func_id, &block.stmts);
 
                     self.terminate(MirTerm::Goto(continue_bb));
                     self.set_block(continue_bb);
@@ -371,18 +455,21 @@ impl Builder {
 pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) -> MirProgram {
     let __module_init_symbol = ctx.interner.intern("__module_init");
     let mut builder = Builder {
+        ctx,
+
         program: MirProgram { entry: FuncId(0), funcs: Vec::new() },
         current_func: FuncId(0),
         current_block: BlockId(0),
         loop_context: LoopContext { break_bb: None, continue_bb: None },
 
+        def_to_owner: vec![None; ctx.defs.len()],
         def_to_local: vec![None; ctx.defs.len()],
         def_to_func: vec![None; ctx.defs.len()],
     };
 
     let entry_id = builder.new_func(__module_init_symbol);
     builder.program.entry = entry_id;
-    builder.lower_into(ctx, entry_id, hir);
+    builder.lower_into(entry_id, hir);
     builder.terminate(MirTerm::Return(MirValue::Nil));
 
     builder.program

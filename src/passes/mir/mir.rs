@@ -5,14 +5,17 @@
  * Created: 2026-03-01
  **/
 
-use crate::passes::Symbol;
+use std::collections::HashMap;
+use crate::passes::{ PassContext, DefId, Symbol };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FuncId(pub usize);
 #[derive(Debug, Clone, Copy)]
 pub struct BlockId(pub usize);
 #[derive(Debug, Clone, Copy)]
 pub struct LocalId(pub usize);
+#[derive(Debug, Clone, Copy)]
+pub struct ClosureId(pub usize);
 
 #[derive(Debug)]
 pub struct LoopContext {
@@ -21,11 +24,14 @@ pub struct LoopContext {
 }
 
 #[derive(Debug)]
-pub struct Builder {
+pub struct Builder<'a> {
+    pub ctx: &'a PassContext,
     pub program: MirProgram,
     pub current_func: FuncId,
     pub current_block: BlockId,
     pub loop_context: LoopContext,
+
+    pub def_to_owner: Vec<Option<FuncId>>,
     pub def_to_local: Vec<Option<LocalId>>,
     pub def_to_func: Vec<Option<FuncId>>,
 }
@@ -43,6 +49,9 @@ pub struct MirFunction {
     pub params: Vec<LocalId>,
     pub blocks: Vec<BasicBlock>,
     pub locals: usize,
+
+    pub captures: Vec<Capture>,
+    pub capture_map: HashMap<DefId, usize>,
 }
 
 #[derive(Debug)]
@@ -50,6 +59,19 @@ pub struct BasicBlock {
     pub id: BlockId,
     pub stmts: Vec<MirStmt>,
     pub term: Option<MirTerm>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Capture {
+    ByRef { def_id: DefId, slot: usize },
+}
+
+impl Capture {
+    pub fn def_id(&self) -> DefId {
+        match *self {
+            Capture::ByRef { def_id, .. } => def_id,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -61,6 +83,11 @@ pub enum MirStmt {
 
     Index { dst: LocalId, base: MirValue, index: MirValue },
     Field { dst: LocalId, base: MirValue, name: Symbol },
+
+    // closures
+    LoadUpvalue { dst: LocalId, slot: usize },
+    StoreUpvalue { slot: usize, src: Box<MirValue> },
+    MakeClosure { dst: LocalId, func: FuncId, env: Vec<Capture> }
 }
 
 #[derive(Debug)]
@@ -78,11 +105,15 @@ pub enum MirValue {
     ConstDouble(f64),
     ConstBool(bool),
     Nil,
+
+    //
+    Closure(ClosureId),
 }
 
 #[derive(Debug)]
 pub enum MirPlace {
     Local(LocalId),
+    Upvalue(usize),
 }
 
 #[derive(Debug)]

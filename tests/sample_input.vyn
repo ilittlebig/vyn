@@ -38,8 +38,11 @@ while true {
 }
 */
 
-local a = 0;
-local b = a.b
+local x = 0;
+local function f() {
+    x = 2;
+    return x;
+}
 
 /*
 local function foo(a: bool, b, c) {

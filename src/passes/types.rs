@@ -15,6 +15,7 @@ use crate::passes::hir::{ HirExprKind, HirExpr, HirStmt, HirBlock, HirParam };
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TypeId(pub usize);
 
+#[derive(Debug)]
 pub struct BuiltinTypes {
     pub string: TypeId,
     pub int: TypeId,
@@ -30,12 +31,14 @@ impl BuiltinTypes {
     }
 }
 
+#[derive(Debug)]
 pub enum TypeDefKind {
     Builtin,
     // Struct { ... },
     // Enum { ... },
 }
 
+#[derive(Debug)]
 pub struct TypeDef {
     pub name: Symbol,
     pub kind: TypeDefKind,

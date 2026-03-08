@@ -10,7 +10,7 @@ use std::fmt::{ self, Write };
 use crate::passes::PassContext;
 use crate::passes::mir::{
     MirProgram, MirFunction, MirStmt, MirTerm, BasicBlock,
-    MirValue, MirBinOp, MirPlace, MirUnOp
+    MirValue, MirBinOp, MirPlace, MirUnOp, Capture
 };
 
 pub struct MirPrinter<'a> {
@@ -182,6 +182,40 @@ impl<'a> MirPrinter<'a> {
 
                 self.write_raw("]");
                 self.end_line();
+            },
+
+            // closures
+            MirStmt::MakeClosure { dst, func, env } => {
+                self.begin_line();
+                self.write_raw_fmt(format_args!("l{} = mkclosure fn{}, [", dst.0, func.0));
+
+                let mut index = 0;
+                for capture in env {
+                    self.print_capture(capture);
+                    index += 1;
+                    if index != env.len() { self.write_raw(", "); }
+                }
+
+                self.write_raw("]");
+                self.end_line();
+            },
+            MirStmt::LoadUpvalue { dst, slot } => {
+                self.line_fmt(format_args!("l{} = load_upvalue slot{}", dst.0, slot));
+            },
+            MirStmt::StoreUpvalue { slot, src } => {
+                self.begin_line();
+                self.write_raw_fmt(format_args!("store_upvalue slot{}, ", slot));
+                self.print_value(src);
+                self.end_line();
+            },
+        }
+    }
+
+    fn print_capture(&mut self, capture: &Capture) {
+        match capture {
+            Capture::ByRef { slot, .. } => {
+                // should probably add a comment with the name of the variable
+                self.write_raw_fmt(format_args!("byref slot{}", slot));
             },
         }
     }

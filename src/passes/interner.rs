@@ -9,6 +9,7 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use crate::passes::Symbol;
 
+#[derive(Debug)]
 pub struct Interner {
     map: HashMap<Rc<str>, Symbol>,
     strings: Vec<Rc<str>>,

@@ -25,18 +25,20 @@ mod type_checking;
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub struct Symbol(usize);
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct DefId(usize);
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 struct ScopeId(usize);
 
+#[derive(Debug)]
 pub enum DefKind {
     LocalVar,
     Function,
     Param,
 }
 
+#[derive(Debug)]
 pub struct Def {
     name: Symbol,
     span: Span,
@@ -49,6 +51,7 @@ pub struct Scope {
     bindings: HashMap<Symbol, DefId>,
 }
 
+#[derive(Debug)]
 pub struct PassContext {
     pub interner: Interner,
     pub defs: Vec<Def>,
