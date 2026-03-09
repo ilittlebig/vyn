@@ -5,11 +5,9 @@
  * Created: 2026-02-24
  **/
 
-use crate::passes::types;
-use crate::passes::types::Type;
-
 use crate::passes::PassContext;
 use crate::diagnostics::Diagnostic;
+use crate::passes::type_checking::{ self, Type };
 use crate::passes::hir::{ HirStmt, HirStmtKind, HirExpr, HirBlock, HirExprKind };
 
 struct ContextStack {
@@ -19,15 +17,15 @@ struct ContextStack {
 }
 
 fn expect_cond(ctx: &mut PassContext, cond: &HirExpr) {
-    let cond_ty = types::type_expr(ctx, cond);
+    let cond_ty = type_checking::type_expr(ctx, cond);
     let is_bool = cond_ty == Type::Named(ctx.builtin_types.bool);
     let is_ok = is_bool || cond_ty == Type::Error || cond_ty == Type::Any;
 
     if !is_ok {
         let msg = format!(
             "expected '{}', got '{}'",
-            types::fmt_type(ctx, &Type::Named(ctx.builtin_types.bool)),
-            types::fmt_type(ctx, &cond_ty)
+            type_checking::fmt_type(ctx, &Type::Named(ctx.builtin_types.bool)),
+            type_checking::fmt_type(ctx, &cond_ty)
         );
         ctx.diags.push(Diagnostic::error(msg, cond.span));
     }
@@ -64,26 +62,26 @@ fn check_stmt(ctx: &mut PassContext, ctx_stack: &mut ContextStack, stmt: &HirStm
             let ann = ctx.def_ann[def_id.0].clone();
 
             let annotated = ann.as_ref().map(|t| {
-                let (ty, ty_span) = types::lower_type_ref(ctx, &t);
+                let (ty, ty_span) = type_checking::lower_type_ref(ctx, &t);
                 if matches!(ty, Type::Error) {
                     ctx.diags.push(Diagnostic::error("unknown type name", ty_span));
                 }
                 ty
             });
 
-            let inferred = init.as_ref().map(|e| types::type_expr(ctx, e));
+            let inferred = init.as_ref().map(|e| type_checking::type_expr(ctx, e));
             let def_type = annotated.clone().or(inferred.clone()).unwrap_or(Type::Any);
             ctx.def_types[def_id.0] = def_type;
 
             if let (Some(ann), Some(inf)) = (annotated, inferred) {
                 // we will get cascading errors here unless we check if either side
                 // was of type error
-                if !types::assignable(&ann, &inf) && ann != Type::Error && inf != Type::Error {
+                if !type_checking::assignable(&ann, &inf) && ann != Type::Error && inf != Type::Error {
                     let span = init.as_ref().map(|e| e.span).unwrap_or(name_span);
                     let msg = format!(
                         "cannot assign '{}' to '{}'",
-                        types::fmt_type(ctx, &inf),
-                        types::fmt_type(ctx, &ann)
+                        type_checking::fmt_type(ctx, &inf),
+                        type_checking::fmt_type(ctx, &ann)
                     );
                     ctx.diags.push(Diagnostic::error(msg, span));
                 }
@@ -108,7 +106,7 @@ fn check_stmt(ctx: &mut PassContext, ctx_stack: &mut ContextStack, stmt: &HirStm
                 if !block_def_returns(&init) {
                     let msg = format!(
                         "not all paths return a value of type '{}'",
-                        types::fmt_type(ctx, &ret_type)
+                        type_checking::fmt_type(ctx, &ret_type)
                     );
                     ctx.diags.push(Diagnostic::error(msg, *ret_span));
                 }
@@ -165,14 +163,14 @@ fn check_stmt(ctx: &mut PassContext, ctx_stack: &mut ContextStack, stmt: &HirStm
 
             if let Some(expected) = &ctx_stack.expected_return {
                 if let Some(expr) = &expr {
-                    let actual = types::type_expr(ctx, expr);
+                    let actual = type_checking::type_expr(ctx, expr);
                     let mismatch = *expected != actual && *expected != Type::Any;
 
                     if mismatch {
                         let msg = format!(
                             "return type '{}' does not match expected type '{}'",
-                            types::fmt_type(ctx, &actual),
-                            types::fmt_type(ctx, expected)
+                            type_checking::fmt_type(ctx, &actual),
+                            type_checking::fmt_type(ctx, expected)
                         );
                         ctx.diags.push(Diagnostic::error(msg, stmt.span));
                     }
@@ -180,7 +178,7 @@ fn check_stmt(ctx: &mut PassContext, ctx_stack: &mut ContextStack, stmt: &HirStm
             }
         },
 
-        HirStmtKind::Expr(expr) => { types::type_expr(ctx, &expr); },
+        HirStmtKind::Expr(expr) => { type_checking::type_expr(ctx, &expr); },
         HirStmtKind::Block(block) => check_block(ctx, ctx_stack, &block),
         _ => {},
     }

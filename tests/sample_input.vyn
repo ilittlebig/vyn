@@ -38,15 +38,12 @@ local a = function(b, c, d) {
     return aa;
 }
 */
-local aa = 0;
-local function foo() {
-  return aa;
-}
 
-local cc = 0;
-local bb = function() {
-  return cc;
+local function foo() {
+    local a = 25;
+    return a
 }
+foo()
 
 /*
 while true {

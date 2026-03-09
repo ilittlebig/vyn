@@ -10,17 +10,16 @@ use std::collections::HashMap;
 use crate::passes::mir::MirPrinter;
 use crate::tools::cli::CompileOptions;
 use crate::passes::interner::Interner;
-use crate::passes::types::{ Type, TypeDef, TypeDefKind, TypeId, BuiltinTypes };
 use crate::frontend::parser::{ TypeRef, Stmt };
+use crate::passes::type_checking::{ Type, TypeDef, TypeDefKind, TypeId, BuiltinTypes };
 use crate::diagnostics::{ Span, Diagnostic, Severity };
 
 mod hir;
-mod mir;
-mod types;
-mod interner;
-
-mod name_resolve;
 mod type_checking;
+mod mir;
+mod codegen;
+
+mod interner;
 
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub struct Symbol(usize);
@@ -135,10 +134,10 @@ impl PassContext {
 pub fn run_passes(ast: &Vec<Stmt>, opts: &CompileOptions) -> Vec<Diagnostic> {
     let mut ctx = PassContext::new();
 
-    let hir = name_resolve::run(&mut ctx, ast);
+    let hir = hir::lower(&mut ctx, ast);
     if ctx.has_errors() { return ctx.diags; }
 
-    type_checking::run(&mut ctx, &hir);
+    type_checking::check(&mut ctx, &hir);
     if ctx.has_errors() { return ctx.diags; }
 
     let mir = mir::lower(&mut ctx, &hir);
@@ -146,6 +145,8 @@ pub fn run_passes(ast: &Vec<Stmt>, opts: &CompileOptions) -> Vec<Diagnostic> {
         let mut mir_printer = MirPrinter::new(&mut ctx, &mir);
         mir_printer.dump_program();
     }
+
+    codegen::emit_program(mir);
 
     ctx.diags
 }

@@ -5,8 +5,7 @@
  * Created: 2026-02-06
  **/
 
-use crate::passes::types;
-use crate::passes::types::Type;
+use crate::passes::type_checking::{ self, Type };
 
 use crate::frontend::parser::{ TypeRef, Stmt, StmtKind, Expr, Block, Param };
 use crate::diagnostics::{ Span, Spanned, Diagnostic };
@@ -87,7 +86,7 @@ fn lower_function_scoped(
 
         let type_ref = &param.ty;
         let param_ann = if let Some(t_ref) = type_ref {
-            let (ty, _) = types::lower_type_ref(ctx, t_ref);
+            let (ty, _) = type_checking::lower_type_ref(ctx, t_ref);
             ty
         } else {
             Type::Any
@@ -132,7 +131,7 @@ fn traverse_expr(ctx: &mut PassContext, expr: &Spanned<Expr>) -> HirExpr {
 
         Expr::Func(f) => {
             let fn_ret = &f.ret;
-            let ret_type = fn_ret.as_ref().map(|type_ref| types::lower_type_ref(ctx, &type_ref).0);
+            let ret_type = fn_ret.as_ref().map(|type_ref| type_checking::lower_type_ref(ctx, &type_ref).0);
             let (block, params) = lower_function_scoped(ctx, None, &f.body, &f.params);
 
             HirExpr {
@@ -248,7 +247,7 @@ fn traverse_stmt(ctx: &mut PassContext, stmt: &Stmt) -> HirStmt {
             // recursion inside local function a() { a() }
             let def_id = declare_var(ctx, symbol, *name_span, DefKind::Function);
             let fn_ret = &init.ret;
-            let ret = fn_ret.as_ref().map(|type_ref| types::lower_type_ref(ctx, &type_ref));
+            let ret = fn_ret.as_ref().map(|type_ref| type_checking::lower_type_ref(ctx, &type_ref));
 
             let (block, params) = lower_function_scoped(
                 ctx,

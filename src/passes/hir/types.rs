@@ -6,7 +6,7 @@
  **/
 
 use crate::diagnostics::Span;
-use crate::passes::types::Type;
+use crate::passes::type_checking::Type;
 use crate::frontend::parser::UnaryOp;
 use crate::frontend::lexer::Operator;
 use crate::passes::{ Symbol, DefId };
