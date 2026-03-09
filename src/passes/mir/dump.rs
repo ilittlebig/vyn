@@ -272,6 +272,9 @@ impl<'a> MirPrinter<'a> {
             MirValue::ConstBool(b) => {
                 self.write_raw_fmt(format_args!("const {}", b));
             },
+            MirValue::ConstString(v) => {
+                self.write_raw_fmt(format_args!("const {}", v));
+            },
             MirValue::Nil => self.out.push_str("nil"),
             _ => self.out.push_str("<unimplemented value>"),
         }

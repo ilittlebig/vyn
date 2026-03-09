@@ -25,7 +25,9 @@ pub struct LoopContext {
 
 #[derive(Debug)]
 pub struct Builder<'a> {
-    pub ctx: &'a PassContext,
+    pub ctx: &'a mut PassContext,
+    pub anon_func: usize,
+
     pub program: MirProgram,
     pub current_func: FuncId,
     pub current_block: BlockId,
@@ -104,6 +106,7 @@ pub enum MirValue {
     ConstInt(i64),
     ConstDouble(f64),
     ConstBool(bool),
+    ConstString(String),
     Nil,
 
     //
