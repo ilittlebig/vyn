@@ -293,6 +293,10 @@ impl<'a> MirPrinter<'a> {
             MirBinOp::Lte => self.write_raw("lte"),
             MirBinOp::Gt => self.write_raw("gt"),
             MirBinOp::Gte => self.write_raw("gte"),
+
+            // boolean
+            MirBinOp::And => self.write_raw("and"),
+            MirBinOp::Or => self.write_raw("or"),
             _ => self.write_raw("<unimplemented binary operator>"),
         }
     }

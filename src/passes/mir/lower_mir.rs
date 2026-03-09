@@ -252,6 +252,7 @@ impl Builder<'_> {
         match &expr.kind {
             HirExprKind::Int(v) => MirValue::ConstInt(*v),
             HirExprKind::Double(v) => MirValue::ConstDouble(*v),
+            HirExprKind::Bool(v) => MirValue::ConstBool(*v),
             HirExprKind::VarRef { def: def_id } => {
                 let Some(func_id) = self.def_to_owner[def_id.0] else {
                     unreachable!("VarRef without owner: {:?}", def_id);
@@ -341,7 +342,7 @@ impl Builder<'_> {
                 self.emit_stmt(MirStmt::Field { dst: temp_id, base, name: *name });
                 MirValue::Local(temp_id)
             },
-            _ => MirValue::ConstBool(false),
+            _ => { println!("expr: {:?}", expr); todo!(); },
         }
     }
 

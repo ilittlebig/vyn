@@ -23,11 +23,11 @@ if "a" + "b" {}
 */
 
 /*
-while true {
-    local a = 1
-    break
+while 1==1 && false {
 }
 */
+while 1==2 || true {
+}
 
 /*
 while true {
@@ -38,8 +38,10 @@ while true {
 }
 */
 
+/*
 if +1 == -2+"helo" {
 }
+*/
 
 /*
 local function foo(a: bool, b, c) {
