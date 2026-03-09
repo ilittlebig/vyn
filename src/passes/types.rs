@@ -116,6 +116,20 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
             }
 
             match op {
+                Operator::Plus |
+                Operator::Minus |
+                Operator::Multiplication |
+                Operator::Division |
+                Operator::Modulus => {
+                    let is_lhs_ok = is_numeric_type(ctx, &lhs_ty) || lhs_ty == Type::Any;
+                    let is_rhs_ok = is_numeric_type(ctx, &rhs_ty) || rhs_ty == Type::Any;
+
+                    if !is_lhs_ok || !is_rhs_ok {
+                        emit_binop_type_error(ctx, &lhs_ty, &rhs_ty, op, expr.span);
+                        return Type::Error;
+                    }
+                    lhs_ty
+                },
                 Operator::Equal | Operator::NotEqual => {
                     if lhs_ty != rhs_ty && lhs_ty != Type::Any && rhs_ty != Type::Any {
                         emit_binop_type_error(ctx, &lhs_ty, &rhs_ty, op, expr.span);
@@ -137,7 +151,7 @@ pub fn type_expr(ctx: &mut PassContext, expr: &HirExpr) -> Type {
                     }
                     Type::Named(ctx.builtin_types.bool)
                 },
-                _ => lhs_ty,
+                _ => { todo!(); },
             }
         },
 

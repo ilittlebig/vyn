@@ -38,10 +38,7 @@ while true {
 }
 */
 
-local x = 0;
-local function f() {
-    x = 2;
-    return x;
+if +1 == -2+"helo" {
 }
 
 /*

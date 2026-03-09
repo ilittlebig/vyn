@@ -213,9 +213,10 @@ impl<'a> MirPrinter<'a> {
 
     fn print_capture(&mut self, capture: &Capture) {
         match capture {
-            Capture::ByRef { slot, .. } => {
-                // should probably add a comment with the name of the variable
-                self.write_raw_fmt(format_args!("byref slot{}", slot));
+            Capture::ByRef { slot, def_id } => {
+                let symbol = self.ctx.defs[def_id.0].name;
+                let name = self.ctx.interner.resolve(symbol).unwrap_or("<unknown name>");
+                self.write_raw_fmt(format_args!("byref {}@slot{}", name, slot));
             },
         }
     }
