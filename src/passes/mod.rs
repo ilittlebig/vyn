@@ -7,8 +7,9 @@
 
 use std::collections::HashMap;
 
-use crate::passes::mir::MirPrinter;
+use crate::passes::mir::MirDumper;
 use crate::tools::cli::CompileOptions;
+use crate::tools::fmt::Printer;
 use crate::passes::interner::Interner;
 use crate::frontend::parser::{ TypeRef, Stmt };
 use crate::passes::type_checking::{ Type, TypeDef, TypeDefKind, TypeId, BuiltinTypes };
@@ -142,8 +143,16 @@ pub fn run_passes(ast: &Vec<Stmt>, opts: &CompileOptions) -> Vec<Diagnostic> {
 
     let mir = mir::lower(&mut ctx, &hir);
     if opts.dump_mir {
-        let mut mir_printer = MirPrinter::new(&mut ctx, &mir);
-        mir_printer.dump_program();
+        let mut printer = Printer::new(String::new());
+        let mut mir_dumper = MirDumper::new(
+            &mut printer,
+            &mut ctx,
+            &mir,
+        );
+        mir_dumper.dump_program();
+
+        let out = printer.finish();
+        println!("{}", out);
     }
 
     codegen::emit_program(mir);

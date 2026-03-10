@@ -14,7 +14,7 @@ use crate::passes::{ PassContext, Symbol, DefId };
 use crate::passes::hir::{ HirParam, HirStmt, HirStmtKind, HirExpr, HirExprKind, HirBlock };
 use crate::passes::mir::{
     Builder, MirProgram, MirFunction, MirStmt, MirTerm, BasicBlock, FuncId, BlockId,
-    LocalId, MirValue, MirPrinter, MirBinOp, MirUnOp, MirPlace, LoopContext, Capture
+    LocalId, MirValue, MirDumper, MirBinOp, MirUnOp, MirPlace, LoopContext, Capture
 };
 
 impl Builder<'_> {
@@ -448,7 +448,7 @@ impl Builder<'_> {
 }
 
 pub fn run(ctx: &mut PassContext, hir: &[HirStmt]) -> MirProgram {
-    let __module_init_symbol = ctx.interner.intern("__module_init");
+    let __module_init_symbol = ctx.interner.intern("__start");
     let defs = ctx.defs.len();
 
     let mut builder = Builder {

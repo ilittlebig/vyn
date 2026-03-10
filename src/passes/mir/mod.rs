@@ -13,7 +13,7 @@ mod dump;
 mod lower_mir;
 
 pub use mir::*;
-pub use dump::MirPrinter;
+pub use dump::MirDumper;
 
 pub fn lower(ctx: &mut PassContext, hir: &[HirStmt]) -> MirProgram {
     lower_mir::run(ctx, hir)

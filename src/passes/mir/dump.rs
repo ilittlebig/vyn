@@ -7,315 +7,272 @@
 
 use std::fmt::{ self, Write };
 
+use crate::tools::fmt::Printer;
 use crate::passes::PassContext;
 use crate::passes::mir::{
     MirProgram, MirFunction, MirStmt, MirTerm, BasicBlock,
     MirValue, MirBinOp, MirPlace, MirUnOp, Capture
 };
 
-pub struct MirPrinter<'a> {
+pub struct MirDumper<'a, W: Write> {
+    pub p: &'a mut Printer<W>,
     pub program: &'a MirProgram,
     pub ctx: &'a PassContext,
-    pub out: String,
-    pub indent: usize,
 }
 
-impl<'a> MirPrinter<'a> {
-    pub fn new(ctx: &'a PassContext, program: &'a MirProgram) -> Self {
-        Self { program, ctx, out: String::new(), indent: 0 }
+impl<'a, W: Write> MirDumper<'a, W> {
+    pub fn new(printer: &'a mut Printer<W>, ctx: &'a PassContext, program: &'a MirProgram) -> Self {
+        Self { p: printer, program, ctx }
     }
 
-    fn indent(&mut self) {
-        let n = self.indent * 4;
-        for i in 0..n {
-            self.out.push(' ');
-        }
+    pub fn dump_program(&mut self) {
+        self.print_program(self.program);
     }
 
-    fn with_indent<F: FnOnce(&mut Self)>(&mut self, f: F) {
-        self.indent += 1;
-        f(self);
-        self.indent -= 1;
-    }
-
-    //
-    fn line(&mut self, s: &str) {
-        self.indent();
-        let _ = writeln!(&mut self.out, "{s}");
-    }
-
-    fn line_fmt(&mut self, args: fmt::Arguments) {
-        self.indent();
-        let _ = self.out.write_fmt(args);
-        self.out.push('\n');
-    }
-
-    //
-    fn begin_line(&mut self) {
-        self.indent();
-    }
-
-    fn end_line(&mut self) {
-        self.out.push('\n');
-    }
-
-    fn write_raw(&mut self, s: &str) {
-        let _ = self.out.write_str(s);
-    }
-
-    fn write_raw_fmt(&mut self, args: fmt::Arguments) {
-        let _ = self.out.write_fmt(args);
-    }
-
-    //
     fn print_program(&mut self, program: &MirProgram) {
-        self.line("program {");
-        self.with_indent(|p| {
+        self.p.line("program {");
+        let ctx = self.ctx;
+        self.p.with_indent(|p| {
             p.line_fmt(format_args!("entry: fn{}", program.entry.0));
             p.line("");
 
             for func in &program.funcs {
-                p.print_func(&func);
+                Self::print_func_inner(p, ctx, program, func);
             }
         });
-        self.write_raw("}");
+        self.p.write_raw("}");
     }
 
-    fn print_func(&mut self, func: &MirFunction) {
-        let name = if let Some(fn_name) = self.ctx.interner.resolve(func.name) {
+    fn print_func_inner(p: &mut Printer<W>, ctx: &PassContext, program: &MirProgram, func: &MirFunction) {
+        let name = if let Some(fn_name) = ctx.interner.resolve(func.name) {
             fn_name
         } else {
             // should never happen
             "<unknown_symbol>"
         };
 
-        self.begin_line();
-        self.write_raw_fmt(format_args!("fn{} {}(", func.id.0, name));
+        p.begin_line();
+        p.write_raw_fmt(format_args!("fn{} {}(", func.id.0, name));
 
         let mut index = 0;
         for param in &func.params {
-            self.write_raw_fmt(format_args!("l{}", param.0));
+            p.write_raw_fmt(format_args!("l{}", param.0));
             index += 1;
-            if index != func.params.len() { self.write_raw(", "); }
+            if index != func.params.len() { p.write_raw(", "); }
         }
 
-        self.write_raw(") {");
-        self.end_line();
+        p.write_raw(") {");
+        p.end_line();
 
-        self.with_indent(|p| {
+        p.with_indent(|p| {
             for block in &func.blocks {
-                p.print_block(&block);
+                Self::print_block_inner(p, ctx, program, block);
             }
         });
 
-        self.line("}");
-        self.line("");
+        p.line("}");
+        p.line("");
     }
 
-    fn print_block(&mut self, block: &BasicBlock) {
-        self.line_fmt(format_args!("bb{}:", block.id.0));
-        self.with_indent(|p| {
+    fn print_block_inner(p: &mut Printer<W>, ctx: &PassContext, program: &MirProgram, block: &BasicBlock) {
+        p.line_fmt(format_args!("bb{}:", block.id.0));
+        p.with_indent(|p| {
             for stmt in &block.stmts {
-                p.print_stmt(&stmt);
+                Self::print_stmt_inner(p, ctx, program, stmt);
             }
-            p.print_term(&block.term);
+            Self::print_term_inner(p, ctx, program, &block.term);
         });
     }
 
-    fn print_stmt(&mut self, stmt: &MirStmt) {
+    fn print_stmt_inner(p: &mut Printer<W>, ctx: &PassContext, program: &MirProgram, stmt: &MirStmt) {
         match stmt {
             MirStmt::Assign { dst, src } => {
-                self.begin_line();
-                self.print_place(dst);
-                self.print_value(src);
-                self.end_line();
+                p.begin_line();
+                Self::print_place_inner(p, dst);
+                Self::print_value_inner(p, ctx, program, src);
+                p.end_line();
             },
             MirStmt::Index { dst, base, index } => {
-                self.begin_line();
-                self.write_raw_fmt(format_args!("l{} = ", dst.0));
-                self.write_raw("index ");
-                self.print_value(base);
-                self.write_raw(", ");
-                self.print_value(index);
-                self.end_line();
+                p.begin_line();
+                p.write_raw_fmt(format_args!("l{} = ", dst.0));
+                p.write_raw("index ");
+                Self::print_value_inner(p, ctx, program, base);
+                p.write_raw(", ");
+                Self::print_value_inner(p, ctx, program, index);
+                p.end_line();
             },
             MirStmt::Field { dst, base, name } => {
-                let name = self.ctx.interner.resolve(*name).unwrap_or("<unknown field>");
-                self.begin_line();
-                self.write_raw_fmt(format_args!("l{} = ", dst.0));
-                self.write_raw("field ");
-                self.print_value(base);
-                self.write_raw(", ");
-                self.write_raw_fmt(format_args!("{}", name));
-                self.end_line();
+                let name = ctx.interner.resolve(*name).unwrap_or("<unknown field>");
+                p.begin_line();
+                p.write_raw_fmt(format_args!("l{} = ", dst.0));
+                p.write_raw("field ");
+                Self::print_value_inner(p, ctx, program, base);
+                p.write_raw(", ");
+                p.write_raw_fmt(format_args!("{}", name));
+                p.end_line();
             },
             MirStmt::BinOp { dst, lhs, op, rhs } => {
-                self.begin_line();
-                self.write_raw_fmt(format_args!("l{} = ", dst.0));
-                self.print_bin_op(op);
-                self.write_raw(" ");
-                self.print_value(lhs);
-                self.write_raw(", ");
-                self.print_value(rhs);
-                self.end_line();
+                p.begin_line();
+                p.write_raw_fmt(format_args!("l{} = ", dst.0));
+                Self::print_bin_op_inner(p, op);
+                p.write_raw(" ");
+                Self::print_value_inner(p, ctx, program, lhs);
+                p.write_raw(", ");
+                Self::print_value_inner(p, ctx, program, rhs);
+                p.end_line();
             },
             MirStmt::UnOp { dst, op, rhs } => {
-                self.begin_line();
-                self.write_raw_fmt(format_args!("l{} = ", dst.0));
-                self.print_un_op(op);
-                self.write_raw(" ");
-                self.print_value(rhs);
-                self.end_line();
+                p.begin_line();
+                p.write_raw_fmt(format_args!("l{} = ", dst.0));
+                Self::print_un_op_inner(p, op);
+                p.write_raw(" ");
+                Self::print_value_inner(p, ctx, program, rhs);
+                p.end_line();
             },
             MirStmt::Call { dst, callee, args } => {
-                self.begin_line();
-                self.write_raw_fmt(format_args!("l{} = call ", dst.0));
-                self.print_value(callee);
-                self.write_raw(", [");
+                p.begin_line();
+                p.write_raw_fmt(format_args!("l{} = call ", dst.0));
+                Self::print_value_inner(p, ctx, program, callee);
+                p.write_raw(", [");
 
                 let mut index = 0;
                 for arg in args {
-                    self.print_value(arg);
+                    Self::print_value_inner(p, ctx, program, arg);
                     index += 1;
-                    if index != args.len() { self.write_raw(", "); }
+                    if index != args.len() { p.write_raw(", "); }
                 }
 
-                self.write_raw("]");
-                self.end_line();
+                p.write_raw("]");
+                p.end_line();
             },
 
             // closures
             MirStmt::MakeClosure { dst, func, env } => {
-                self.begin_line();
-                self.write_raw_fmt(format_args!("l{} = mkclosure fn{}, [", dst.0, func.0));
+                p.begin_line();
+                p.write_raw_fmt(format_args!("l{} = mkclosure fn{}, [", dst.0, func.0));
 
                 let mut index = 0;
                 for capture in env {
-                    self.print_capture(capture);
+                    Self::print_capture_inner(p, ctx, capture);
                     index += 1;
-                    if index != env.len() { self.write_raw(", "); }
+                    if index != env.len() { p.write_raw(", "); }
                 }
 
-                self.write_raw("]");
-                self.end_line();
+                p.write_raw("]");
+                p.end_line();
             },
             MirStmt::LoadUpvalue { dst, slot } => {
-                self.line_fmt(format_args!("l{} = load_upvalue slot{}", dst.0, slot));
+                p.line_fmt(format_args!("l{} = load_upvalue slot{}", dst.0, slot));
             },
             MirStmt::StoreUpvalue { slot, src } => {
-                self.begin_line();
-                self.write_raw_fmt(format_args!("store_upvalue slot{}, ", slot));
-                self.print_value(src);
-                self.end_line();
+                p.begin_line();
+                p.write_raw_fmt(format_args!("store_upvalue slot{}, ", slot));
+                Self::print_value_inner(p, ctx, program, src);
+                p.end_line();
             },
         }
     }
 
-    fn print_capture(&mut self, capture: &Capture) {
+    fn print_capture_inner(p: &mut Printer<W>, ctx: &PassContext, capture: &Capture) {
         match capture {
             Capture::ByRef { slot, def_id } => {
-                let symbol = self.ctx.defs[def_id.0].name;
-                let name = self.ctx.interner.resolve(symbol).unwrap_or("<unknown name>");
-                self.write_raw_fmt(format_args!("byref {}@slot{}", name, slot));
+                let symbol = ctx.defs[def_id.0].name;
+                let name = ctx.interner.resolve(symbol).unwrap_or("<unknown name>");
+                p.write_raw_fmt(format_args!("byref {}@slot{}", name, slot));
             },
         }
     }
 
-    fn print_place(&mut self, place: &MirPlace) {
+    fn print_place_inner(p: &mut Printer<W>, place: &MirPlace) {
         match place {
-            MirPlace::Local(id) => self.write_raw_fmt(format_args!("l{} = ", id.0)),
-            _ => self.write_raw("<unimplemented place>"),
+            MirPlace::Local(id) => p.write_raw_fmt(format_args!("l{} = ", id.0)),
+            _ => p.write_raw("<unimplemented place>"),
         }
     }
 
-    fn print_term(&mut self, term: &Option<MirTerm>) {
+    fn print_term_inner(p: &mut Printer<W>, ctx: &PassContext, program: &MirProgram, term: &Option<MirTerm>) {
         match term {
             Some(MirTerm::Return(value)) => {
-                self.begin_line();
-                self.write_raw("return ");
-                self.print_value(value);
-                self.end_line();
+                p.begin_line();
+                p.write_raw("return ");
+                Self::print_value_inner(p, ctx, program, value);
+                p.end_line();
             },
             Some(MirTerm::Goto(block_id)) => {
-                self.line_fmt(format_args!("goto bb{}", block_id.0));
+                p.line_fmt(format_args!("goto bb{}", block_id.0));
             },
             Some(MirTerm::If { cond, then_bb, else_bb }) => {
-                self.begin_line();
-                self.write_raw("if ");
-                self.print_value(cond);
-                self.write_raw(" ");
-                self.write_raw_fmt(format_args!("goto bb{}", then_bb.0));
-                self.write_raw(" else ");
-                self.write_raw_fmt(format_args!("goto bb{}", else_bb.0));
-                self.end_line();
+                p.begin_line();
+                p.write_raw("if ");
+                Self::print_value_inner(p, ctx, program, cond);
+                p.write_raw(" ");
+                p.write_raw_fmt(format_args!("goto bb{}", then_bb.0));
+                p.write_raw(" else ");
+                p.write_raw_fmt(format_args!("goto bb{}", else_bb.0));
+                p.end_line();
             },
-            None => self.line("<missing terminator>"),
+            None => p.line("<missing terminator>"),
         }
     }
 
-    fn print_value(&mut self, value: &MirValue) {
+    fn print_value_inner(p: &mut Printer<W>, ctx: &PassContext, program: &MirProgram, value: &MirValue) {
         match value {
             MirValue::Func(id) => {
-                let func = &self.program.funcs[id.0];
-                let name = self.ctx.interner.resolve(func.name).unwrap_or("<unknown function>");
-                self.write_raw_fmt(format_args!("{}", name));
+                let func = &program.funcs[id.0];
+                let name = ctx.interner.resolve(func.name).unwrap_or("<unknown function>");
+                p.write_raw_fmt(format_args!("{}", name));
             },
             MirValue::Local(id) => {
-                self.write_raw_fmt(format_args!("l{}", id.0));
+                p.write_raw_fmt(format_args!("l{}", id.0));
             },
             MirValue::ConstInt(i) => {
-                self.write_raw_fmt(format_args!("const {}", i));
+                p.write_raw_fmt(format_args!("const {}", i));
             },
             MirValue::ConstDouble(f) => {
-                self.write_raw_fmt(format_args!("const {}", f));
+                p.write_raw_fmt(format_args!("const {}", f));
             },
             MirValue::ConstBool(b) => {
-                self.write_raw_fmt(format_args!("const {}", b));
+                p.write_raw_fmt(format_args!("const {}", b));
             },
             MirValue::ConstString(v) => {
-                self.write_raw_fmt(format_args!("const {}", v));
+                p.write_raw_fmt(format_args!("const {}", v));
             },
-            MirValue::Nil => self.out.push_str("nil"),
-            _ => self.out.push_str("<unimplemented value>"),
+            MirValue::Nil => p.write_raw("nil"),
+            _ => p.write_raw("<unimplemented value>"),
         }
     }
 
-    fn print_bin_op(&mut self, op: &MirBinOp) {
+    fn print_bin_op_inner(p: &mut Printer<W>, op: &MirBinOp) {
         match op {
             // arithmetic
-            MirBinOp::Add => self.write_raw("add"),
-            MirBinOp::Sub => self.write_raw("sub"),
-            MirBinOp::Div => self.write_raw("div"),
-            MirBinOp::Mul => self.write_raw("mul"),
-            MirBinOp::Mod => self.write_raw("mod"),
+            MirBinOp::Add => p.write_raw("add"),
+            MirBinOp::Sub => p.write_raw("sub"),
+            MirBinOp::Div => p.write_raw("div"),
+            MirBinOp::Mul => p.write_raw("mul"),
+            MirBinOp::Mod => p.write_raw("mod"),
 
             // comparison
-            MirBinOp::Eq => self.write_raw("eq"),
-            MirBinOp::Ne => self.write_raw("neq"),
-            MirBinOp::Lt => self.write_raw("lt"),
-            MirBinOp::Lte => self.write_raw("lte"),
-            MirBinOp::Gt => self.write_raw("gt"),
-            MirBinOp::Gte => self.write_raw("gte"),
+            MirBinOp::Eq => p.write_raw("eq"),
+            MirBinOp::Ne => p.write_raw("neq"),
+            MirBinOp::Lt => p.write_raw("lt"),
+            MirBinOp::Lte => p.write_raw("lte"),
+            MirBinOp::Gt => p.write_raw("gt"),
+            MirBinOp::Gte => p.write_raw("gte"),
 
             // boolean
-            MirBinOp::And => self.write_raw("and"),
-            MirBinOp::Or => self.write_raw("or"),
-            _ => self.write_raw("<unimplemented binary operator>"),
+            MirBinOp::And => p.write_raw("and"),
+            MirBinOp::Or => p.write_raw("or"),
+            _ => p.write_raw("<unimplemented binary operator>"),
         }
     }
 
-    fn print_un_op(&mut self, op: &MirUnOp) {
+    fn print_un_op_inner(p: &mut Printer<W>, op: &MirUnOp) {
         match op {
             // unary
-            MirUnOp::Neg => self.write_raw("neg"),
-            MirUnOp::Plus => self.write_raw("plus"),
-            MirUnOp::Not => self.write_raw("not"),
-            _ => self.write_raw("<unimplemented unary operator>"),
+            MirUnOp::Neg => p.write_raw("neg"),
+            MirUnOp::Plus => p.write_raw("plus"),
+            MirUnOp::Not => p.write_raw("not"),
+            _ => p.write_raw("<unimplemented unary operator>"),
         }
-    }
-
-    pub fn dump_program(&mut self) {
-        self.print_program(self.program);
-        println!("{}", self.out);
     }
 }

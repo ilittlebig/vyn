@@ -13,5 +13,7 @@ use aarch64::Codegen;
 
 pub fn emit_program(mir: MirProgram) {
     let codegen = Codegen {
+        mir,
     };
+    codegen.emit();
 }

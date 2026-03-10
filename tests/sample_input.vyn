@@ -39,11 +39,7 @@ local a = function(b, c, d) {
 }
 */
 
-local function foo() {
-    local a = 25;
-    return a
-}
-foo()
+local a = 25;
 
 /*
 while true {
